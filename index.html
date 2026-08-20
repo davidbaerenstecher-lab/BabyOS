@@ -656,15 +656,30 @@ function medLabel(m){
   return m.amount ? `${m.name} · ${m.amount}${m.unit}` : `${m.name} · ${m.unit}`;
 }
 
+function unitLabel(unit, amount){
+  if(unit === 'drops') return amount === 1 ? 'drop' : 'drops';
+  return unit;
+}
+
 function medsSummaryLabel(feedEvents){
   const counts = {};
   feedEvents.forEach(ev=>{
     (ev.meds || []).forEach(m=>{
-      if(!counts[m.id]) counts[m.id] = { name: m.name, count: 0 };
+      if(!counts[m.id]) counts[m.id] = { name: m.name, unit: m.unit, totalAmount: 0, hasAmount: false, count: 0 };
       counts[m.id].count++;
+      if(m.amount){
+        counts[m.id].totalAmount += m.amount;
+        counts[m.id].hasAmount = true;
+      }
     });
   });
-  const parts = Object.values(counts).map(m => m.count > 1 ? `${m.name} ×${m.count}` : m.name);
+  const parts = Object.values(counts).map(m=>{
+    if(m.hasAmount){
+      const amt = Math.round(m.totalAmount * 100) / 100;
+      return `${m.name}: ${amt} ${unitLabel(m.unit, amt)}`;
+    }
+    return m.count > 1 ? `${m.name} ×${m.count}` : m.name;
+  });
   return parts.length ? `💊 ${parts.join(', ')}` : '';
 }
 
@@ -681,7 +696,7 @@ function renderHome(root){
   const main = el('main');
   main.appendChild(el('button', {class:'stack-btn btn-feed', onclick: ()=>openNewEntry('feed')}, [
     el('div', {class:'icon'}, '🍼'),
-    el('div', {}, [el('div', {class:'label'}, 'Feeding'), el('div', {class:'sub'}, 'Log a bottle or nursing session')])
+    el('div', {}, [el('div', {class:'label'}, 'Feeding'), el('div', {class:'sub'}, 'Log a bottle or medication session')])
   ]));
   main.appendChild(el('button', {class:'stack-btn btn-diaper', onclick: ()=>openNewEntry('diaper')}, [
     el('div', {class:'icon'}, '💩'),
