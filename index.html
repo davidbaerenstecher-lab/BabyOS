@@ -192,7 +192,7 @@
     font-size:14px; font-weight:600; color:var(--ink); cursor:pointer;
   }
   .chip.active{ background: var(--diaper); border-color: var(--diaper); color:white; }
-  .meds-header{ display:flex; align-items:center; justify-content:space-between; margin: 14px 0 8px; }
+  .meds-header{ display:flex; align-items:center; gap:8px; margin: 14px 0 8px; }
   .meds-title{ font-size: 12.5px; color: var(--ink-soft); font-weight:600; text-transform:uppercase; letter-spacing:0.4px; }
   .meds-add-btn{
     width:26px; height:26px; padding:0; border:none; border-radius:50%;
@@ -208,6 +208,8 @@
   }
   .med-row.selected{ border-color: var(--feed); background: #FBF0F2; }
   .med-check{ font-size:18px; font-weight:700; color: var(--feed); width:20px; text-align:center; flex-shrink:0; }
+  .med-row-actions{ display:flex; align-items:center; gap:12px; flex-shrink:0; }
+  .med-edit-btn{ border:none; background:none; font-size:16px; padding:4px; line-height:1; cursor:pointer; }
   .sheet-actions{ display:flex; gap:10px; margin-top:22px; }
   .btn-secondary, .btn-primary{
     flex:1; border:none; border-radius:16px; padding:16px; font-size:16px; font-weight:600; font-family:inherit; cursor:pointer;
@@ -232,6 +234,7 @@
   .day-nav .day-label{ font-weight:600; font-size:15px; }
   .day-nav .day-sub{ font-size:12px; color:var(--ink-soft); text-align:center; }
   .day-nav .day-stats{ font-size:12.5px; color: var(--feed-deep); text-align:center; font-weight:600; margin-top:4px; }
+  .day-nav .day-meds{ font-size:12px; color: var(--ink-soft); text-align:center; margin-top:2px; }
 
   .timeline{ display:flex; flex-direction:column; gap:10px; }
   .event-card{
@@ -320,6 +323,7 @@ const state = {
   entryAmPm: 'AM',
   medsScreen: null, // null | 'select' | 'add'
   selectedMedIds: [],
+  editingMedId: null, // set when the add/edit screen is editing an existing saved med
   newMedName: '',
   newMedUnit: 'mL',
   newMedAmount: '',
@@ -454,6 +458,7 @@ function closeModal(){
   state.note = '';
   state.medsScreen = null;
   state.selectedMedIds = [];
+  state.editingMedId = null;
   render();
 }
 
@@ -506,6 +511,7 @@ function toggleMedSelected(id){
 
 function openAddMed(){
   state.medsScreen = 'add';
+  state.editingMedId = null;
   state.newMedName = '';
   state.newMedUnit = 'mL';
   state.newMedAmount = '';
@@ -513,8 +519,19 @@ function openAddMed(){
   render();
 }
 
+function openEditMed(med){
+  state.medsScreen = 'add';
+  state.editingMedId = med.id;
+  state.newMedName = med.name;
+  state.newMedUnit = med.unit;
+  state.newMedAmount = med.amount != null ? String(med.amount) : '';
+  state.newMedNote = med.note || '';
+  render();
+}
+
 function cancelAddMed(){
   state.medsScreen = 'select';
+  state.editingMedId = null;
   render();
 }
 
@@ -522,16 +539,33 @@ async function saveNewMed(){
   const name = state.newMedName.trim();
   if(!name || !state.newMedUnit) return;
   const amtVal = parseFloat(state.newMedAmount);
-  const med = {
-    id: 'm'+Date.now()+Math.random().toString(36).slice(2,7),
-    name,
-    unit: state.newMedUnit,
-    amount: (state.newMedAmount.trim() && !isNaN(amtVal) && amtVal > 0) ? amtVal : null,
-    note: state.newMedNote.trim()
-  };
-  state.meds.push(med);
-  state.selectedMedIds.push(med.id);
+  const amount = (state.newMedAmount.trim() && !isNaN(amtVal) && amtVal > 0) ? amtVal : null;
+  const note = state.newMedNote.trim();
+  if(state.editingMedId){
+    const idx = state.meds.findIndex(m=>m.id===state.editingMedId);
+    if(idx !== -1){
+      state.meds[idx] = { ...state.meds[idx], name, unit: state.newMedUnit, amount, note };
+    }
+  } else {
+    const med = { id:'m'+Date.now()+Math.random().toString(36).slice(2,7), name, unit: state.newMedUnit, amount, note };
+    state.meds.push(med);
+    state.selectedMedIds.push(med.id);
+  }
   state.medsScreen = 'select';
+  state.editingMedId = null;
+  render();
+  try{ await saveEvents(); }
+  catch(e){ showToast('Could not save — check connection'); }
+}
+
+async function deleteMed(){
+  if(!state.editingMedId) return;
+  if(!window.confirm('Delete this medication? This can\'t be undone.')) return;
+  const id = state.editingMedId;
+  state.meds = state.meds.filter(m=>m.id!==id);
+  state.selectedMedIds = state.selectedMedIds.filter(mid=>mid!==id);
+  state.medsScreen = 'select';
+  state.editingMedId = null;
   render();
   try{ await saveEvents(); }
   catch(e){ showToast('Could not save — check connection'); }
@@ -622,6 +656,18 @@ function medLabel(m){
   return m.amount ? `${m.name} · ${m.amount}${m.unit}` : `${m.name} · ${m.unit}`;
 }
 
+function medsSummaryLabel(feedEvents){
+  const counts = {};
+  feedEvents.forEach(ev=>{
+    (ev.meds || []).forEach(m=>{
+      if(!counts[m.id]) counts[m.id] = { name: m.name, count: 0 };
+      counts[m.id].count++;
+    });
+  });
+  const parts = Object.values(counts).map(m => m.count > 1 ? `${m.name} ×${m.count}` : m.name);
+  return parts.length ? `💊 ${parts.join(', ')}` : '';
+}
+
 function recentEvents(){
   return [...state.events].sort((a,b)=>b.timestamp-a.timestamp).slice(0,4);
 }
@@ -663,7 +709,6 @@ function renderHome(root){
     });
   }
   main.appendChild(card);
-  main.appendChild(el('button', {class:'export-btn', onclick: exportCSV}, '⬇ Export all entries as CSV'));
   root.appendChild(main);
 
   if(state.modal === 'feed') root.appendChild(renderFeedModal());
@@ -762,7 +807,10 @@ function renderMedsSelectOverlay(){
           el('div', {class:'title'}, m.name),
           el('div', {class:'desc'}, m.amount ? `${m.amount}${m.unit}` : m.unit)
         ]),
-        el('div', {class:'med-check'}, isSelected ? '✓' : '')
+        el('div', {class:'med-row-actions'}, [
+          el('button', {class:'med-edit-btn', type:'button', onclick:(e)=>{ e.stopPropagation(); openEditMed(m); }}, '✏️'),
+          el('div', {class:'med-check'}, isSelected ? '✓' : '')
+        ])
       ]));
     });
     sheet.appendChild(list);
@@ -779,10 +827,11 @@ function renderMedsSelectOverlay(){
 }
 
 function renderMedsAddOverlay(){
+  const isEdit = !!state.editingMedId;
   const overlay = el('div', {class:'overlay overlay-top', onclick:(e)=>{ if(e.target===overlay) cancelAddMed(); }});
   const sheet = el('div', {class:'sheet'});
-  sheet.appendChild(el('h2', {}, '💊 Add medication'));
-  sheet.appendChild(el('div', {class:'hint'}, "Save it so it's quick to log next time."));
+  sheet.appendChild(el('h2', {}, isEdit ? '💊 Edit medication' : '💊 Add medication'));
+  sheet.appendChild(el('div', {class:'hint'}, isEdit ? 'Update the details below.' : "Save it so it's quick to log next time."));
 
   sheet.appendChild(el('div', {class:'field-label'}, 'Name'));
   const nameInput = el('input', {class:'note-input', type:'text', placeholder:'e.g. Vitamin D drops', value: state.newMedName});
@@ -813,6 +862,10 @@ function renderMedsAddOverlay(){
   actions.appendChild(el('button', {class:'btn-secondary', onclick: cancelAddMed}, 'Cancel'));
   actions.appendChild(el('button', {class:'btn-primary', onclick: saveNewMed}, 'Save'));
   sheet.appendChild(actions);
+
+  if(isEdit){
+    sheet.appendChild(el('button', {class:'delete-link', onclick: deleteMed}, 'Delete medication'));
+  }
 
   overlay.appendChild(sheet);
   setTimeout(()=>nameInput.focus(), 50);
@@ -936,13 +989,17 @@ function renderLog(root){
     return sum + ml;
   }, 0));
 
+  const medsSummary = medsSummaryLabel(feedEvents);
+  const navInfo = [
+    el('div', {class:'day-label'}, fmtDayLabel(state.viewDate)),
+    el('div', {class:'day-sub'}, fmtDaySub(state.viewDate)),
+    el('div', {class:'day-stats'}, `${feedCount} feeding${feedCount===1?'':'s'} · ${totalMl} mL total`)
+  ];
+  if(medsSummary) navInfo.push(el('div', {class:'day-meds'}, medsSummary));
+
   const nav = el('div', {class:'day-nav'}, [
     el('button', {onclick: ()=>{ state.viewDate = new Date(state.viewDate.getTime() - 86400000); render(); }}, '‹'),
-    el('div', {}, [
-      el('div', {class:'day-label'}, fmtDayLabel(state.viewDate)),
-      el('div', {class:'day-sub'}, fmtDaySub(state.viewDate)),
-      el('div', {class:'day-stats'}, `${feedCount} feeding${feedCount===1?'':'s'} · ${totalMl} mL total`)
-    ]),
+    el('div', {}, navInfo),
     el('button', {onclick: ()=>{ state.viewDate = new Date(state.viewDate.getTime() + 86400000); render(); }}, '›')
   ]);
   main.appendChild(nav);
@@ -965,6 +1022,7 @@ function renderLog(root){
     });
     main.appendChild(timeline);
   }
+  main.appendChild(el('button', {class:'export-btn', onclick: exportCSV}, '⬇ Export all entries as CSV'));
   root.appendChild(main);
   if(state.modal === 'feed') root.appendChild(renderFeedModal());
   if(state.modal === 'diaper') root.appendChild(renderDiaperModal());
