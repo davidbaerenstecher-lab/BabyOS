@@ -192,6 +192,22 @@
     font-size:14px; font-weight:600; color:var(--ink); cursor:pointer;
   }
   .chip.active{ background: var(--diaper); border-color: var(--diaper); color:white; }
+  .meds-header{ display:flex; align-items:center; justify-content:space-between; margin: 14px 0 8px; }
+  .meds-title{ font-size: 12.5px; color: var(--ink-soft); font-weight:600; text-transform:uppercase; letter-spacing:0.4px; }
+  .meds-add-btn{
+    width:26px; height:26px; padding:0; border:none; border-radius:50%;
+    background: var(--feed); color:white; font-size:16px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; line-height:1;
+    cursor:pointer; font-family:inherit;
+  }
+  .overlay-top{ z-index: 60; }
+  .med-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background: var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:12px 16px; margin-bottom:8px; cursor:pointer;
+  }
+  .med-row.selected{ border-color: var(--feed); background: #FBF0F2; }
+  .med-check{ font-size:18px; font-weight:700; color: var(--feed); width:20px; text-align:center; flex-shrink:0; }
   .sheet-actions{ display:flex; gap:10px; margin-top:22px; }
   .btn-secondary, .btn-primary{
     flex:1; border:none; border-radius:16px; padding:16px; font-size:16px; font-weight:600; font-family:inherit; cursor:pointer;
@@ -290,6 +306,7 @@ const eventsDocRef = doc(db, "cozylog", "shared");
 const state = {
   screen: 'loading', // loading | home | log
   events: [],
+  meds: [], // saved medications: {id, name, unit, amount, note}
   viewDate: startOfDay(new Date()),
   modal: null, // 'feed' | 'diaper'
   editingId: null,
@@ -301,6 +318,12 @@ const state = {
   entryHour: '12',
   entryMinute: '00',
   entryAmPm: 'AM',
+  medsScreen: null, // null | 'select' | 'add'
+  selectedMedIds: [],
+  newMedName: '',
+  newMedUnit: 'mL',
+  newMedAmount: '',
+  newMedNote: '',
   toast: null,
   toastTimer: null,
 };
@@ -362,6 +385,7 @@ function startListeningForEvents(){
   unsubscribeEvents = onSnapshot(eventsDocRef, (snap)=>{
     const data = snap.exists() ? snap.data() : null;
     state.events = (data && Array.isArray(data.events)) ? data.events : [];
+    state.meds = (data && Array.isArray(data.meds)) ? data.meds : [];
     if(state.screen === 'loading') state.screen = 'home';
     render();
   }, (err)=>{
@@ -373,7 +397,7 @@ function startListeningForEvents(){
 }
 
 async function saveEvents(){
-  await setDoc(eventsDocRef, { events: state.events });
+  await setDoc(eventsDocRef, { events: state.events, meds: state.meds });
 }
 
 function csvEscape(val){
@@ -428,6 +452,8 @@ function closeModal(){
   state.editingId = null;
   state.feedAmount = '';
   state.note = '';
+  state.medsScreen = null;
+  state.selectedMedIds = [];
   render();
 }
 
@@ -436,6 +462,8 @@ function openNewEntry(type){
   state.modal = type;
   state.feedAmount = '';
   state.note = '';
+  state.medsScreen = null;
+  state.selectedMedIds = [];
   if(type==='diaper') state.diaperType = 'dirty';
   setEntryTimeFromDate(new Date());
   render();
@@ -444,16 +472,69 @@ function openNewEntry(type){
 function openEditEntry(ev){
   state.editingId = ev.id;
   state.note = ev.note || '';
+  state.medsScreen = null;
   if(ev.type === 'feed'){
     state.modal = 'feed';
     state.feedAmount = String(ev.amount);
     state.feedUnit = ev.unit;
+    state.selectedMedIds = (ev.meds || []).map(m=>m.id);
   } else {
     state.modal = 'diaper';
     state.diaperType = ev.diaperType;
+    state.selectedMedIds = [];
   }
   setEntryTimeFromDate(new Date(ev.timestamp));
   render();
+}
+
+function openMedsSelect(){
+  state.medsScreen = 'select';
+  render();
+}
+
+function closeMedsScreen(){
+  state.medsScreen = null;
+  render();
+}
+
+function toggleMedSelected(id){
+  const idx = state.selectedMedIds.indexOf(id);
+  if(idx === -1) state.selectedMedIds.push(id);
+  else state.selectedMedIds.splice(idx, 1);
+  render();
+}
+
+function openAddMed(){
+  state.medsScreen = 'add';
+  state.newMedName = '';
+  state.newMedUnit = 'mL';
+  state.newMedAmount = '';
+  state.newMedNote = '';
+  render();
+}
+
+function cancelAddMed(){
+  state.medsScreen = 'select';
+  render();
+}
+
+async function saveNewMed(){
+  const name = state.newMedName.trim();
+  if(!name || !state.newMedUnit) return;
+  const amtVal = parseFloat(state.newMedAmount);
+  const med = {
+    id: 'm'+Date.now()+Math.random().toString(36).slice(2,7),
+    name,
+    unit: state.newMedUnit,
+    amount: (state.newMedAmount.trim() && !isNaN(amtVal) && amtVal > 0) ? amtVal : null,
+    note: state.newMedNote.trim()
+  };
+  state.meds.push(med);
+  state.selectedMedIds.push(med.id);
+  state.medsScreen = 'select';
+  render();
+  try{ await saveEvents(); }
+  catch(e){ showToast('Could not save — check connection'); }
 }
 
 async function deleteEditingEntry(){
@@ -496,16 +577,17 @@ async function logFeed(){
   const amt = parseFloat(state.feedAmount);
   if(!amt || amt <= 0) return;
   const ts = computeEntryTimestamp();
+  const selectedMeds = state.meds.filter(m => state.selectedMedIds.includes(m.id));
   if(state.editingId){
     const idx = state.events.findIndex(e=>e.id===state.editingId);
     if(idx === -1) return;
-    state.events[idx] = {...state.events[idx], amount: amt, unit: state.feedUnit, note: state.note.trim(), timestamp: ts};
+    state.events[idx] = {...state.events[idx], amount: amt, unit: state.feedUnit, note: state.note.trim(), timestamp: ts, meds: selectedMeds};
     closeModal();
     try{ await saveEvents(); showToast('Entry updated'); }
     catch(e){ showToast('Could not save — check connection'); }
     return;
   }
-  const ev = { id:'e'+Date.now()+Math.random().toString(36).slice(2,7), type:'feed', amount: amt, unit: state.feedUnit, timestamp: ts, note: state.note.trim() };
+  const ev = { id:'e'+Date.now()+Math.random().toString(36).slice(2,7), type:'feed', amount: amt, unit: state.feedUnit, timestamp: ts, note: state.note.trim(), meds: selectedMeds };
   state.events.push(ev);
   state.feedAmount = '';
   state.note = '';
@@ -534,6 +616,10 @@ function el(tag, attrs={}, children=[]){
     e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
   });
   return e;
+}
+
+function medLabel(m){
+  return m.amount ? `${m.name} · ${m.amount}${m.unit}` : `${m.name} · ${m.unit}`;
 }
 
 function recentEvents(){
@@ -582,6 +668,8 @@ function renderHome(root){
 
   if(state.modal === 'feed') root.appendChild(renderFeedModal());
   if(state.modal === 'diaper') root.appendChild(renderDiaperModal());
+  if(state.medsScreen === 'select') root.appendChild(renderMedsSelectOverlay());
+  if(state.medsScreen === 'add') root.appendChild(renderMedsAddOverlay());
   if(state.toast) root.appendChild(renderToast());
 }
 
@@ -633,6 +721,104 @@ function renderTimeField(){
   return wrap;
 }
 
+function renderMedsSection(){
+  const wrap = el('div', {});
+  const header = el('div', {class:'meds-header'}, [
+    el('span', {class:'meds-title'}, 'Meds'),
+    el('button', {class:'meds-add-btn', type:'button', onclick: openMedsSelect}, '+')
+  ]);
+  wrap.appendChild(header);
+
+  const selected = state.meds.filter(m => state.selectedMedIds.includes(m.id));
+  if(selected.length === 0){
+    wrap.appendChild(el('div', {class:'empty'}, 'No meds added'));
+  } else {
+    const row = el('div', {class:'chip-row'});
+    selected.forEach(m=>{
+      row.appendChild(el('button', {class:'chip active', type:'button', onclick: openMedsSelect}, medLabel(m)));
+    });
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+function renderMedsSelectOverlay(){
+  const overlay = el('div', {class:'overlay overlay-top', onclick:(e)=>{ if(e.target===overlay) closeMedsScreen(); }});
+  const sheet = el('div', {class:'sheet'});
+  sheet.appendChild(el('h2', {}, '💊 Meds'));
+  sheet.appendChild(el('div', {class:'hint'}, 'What did Coz take with this feeding?'));
+
+  if(state.meds.length === 0){
+    sheet.appendChild(el('div', {class:'empty'}, 'No medications saved yet.'));
+  } else {
+    const list = el('div', {});
+    state.meds.forEach(m=>{
+      const isSelected = state.selectedMedIds.includes(m.id);
+      list.appendChild(el('div', {
+        class: 'med-row' + (isSelected ? ' selected' : ''),
+        onclick: ()=>toggleMedSelected(m.id)
+      }, [
+        el('div', {}, [
+          el('div', {class:'title'}, m.name),
+          el('div', {class:'desc'}, m.amount ? `${m.amount}${m.unit}` : m.unit)
+        ]),
+        el('div', {class:'med-check'}, isSelected ? '✓' : '')
+      ]));
+    });
+    sheet.appendChild(list);
+  }
+
+  sheet.appendChild(el('button', {class:'export-btn', style:'width:100%; margin-top:6px;', onclick: openAddMed}, '+ Add a medication'));
+
+  const actions = el('div', {class:'sheet-actions'});
+  actions.appendChild(el('button', {class:'btn-primary', style:'flex:1;', onclick: closeMedsScreen}, 'Done'));
+  sheet.appendChild(actions);
+
+  overlay.appendChild(sheet);
+  return overlay;
+}
+
+function renderMedsAddOverlay(){
+  const overlay = el('div', {class:'overlay overlay-top', onclick:(e)=>{ if(e.target===overlay) cancelAddMed(); }});
+  const sheet = el('div', {class:'sheet'});
+  sheet.appendChild(el('h2', {}, '💊 Add medication'));
+  sheet.appendChild(el('div', {class:'hint'}, "Save it so it's quick to log next time."));
+
+  sheet.appendChild(el('div', {class:'field-label'}, 'Name'));
+  const nameInput = el('input', {class:'note-input', type:'text', placeholder:'e.g. Vitamin D drops', value: state.newMedName});
+  nameInput.addEventListener('input', (e)=>{ state.newMedName = e.target.value; });
+  sheet.appendChild(nameInput);
+
+  sheet.appendChild(el('div', {class:'field-label'}, 'Amount'));
+  const unitRow = el('div', {class:'chip-row'});
+  ['oz','mL','drops','tsp'].forEach(u=>{
+    unitRow.appendChild(el('button', {
+      class: 'chip' + (state.newMedUnit===u ? ' active' : ''),
+      type:'button',
+      onclick: ()=>{ state.newMedUnit = u; render(); }
+    }, u));
+  });
+  sheet.appendChild(unitRow);
+
+  const amountInput = el('input', {class:'note-input', style:'margin-top:10px;', type:'number', inputmode:'decimal', placeholder:'Amount (optional)', value: state.newMedAmount});
+  amountInput.addEventListener('input', (e)=>{ state.newMedAmount = e.target.value; });
+  sheet.appendChild(amountInput);
+
+  sheet.appendChild(el('div', {class:'field-label'}, 'Note (optional)'));
+  const noteInput = el('textarea', {class:'note-input', rows:'2', placeholder:'e.g. give with food'}, state.newMedNote);
+  noteInput.addEventListener('input', (e)=>{ state.newMedNote = e.target.value; });
+  sheet.appendChild(noteInput);
+
+  const actions = el('div', {class:'sheet-actions'});
+  actions.appendChild(el('button', {class:'btn-secondary', onclick: cancelAddMed}, 'Cancel'));
+  actions.appendChild(el('button', {class:'btn-primary', onclick: saveNewMed}, 'Save'));
+  sheet.appendChild(actions);
+
+  overlay.appendChild(sheet);
+  setTimeout(()=>nameInput.focus(), 50);
+  return overlay;
+}
+
 function renderFeedModal(){
   const isEdit = !!state.editingId;
   const overlay = el('div', {class:'overlay', onclick:(e)=>{ if(e.target===overlay) closeModal(); }});
@@ -658,6 +844,8 @@ function renderFeedModal(){
 
   sheet.appendChild(el('div', {class:'field-label'}, 'Time'));
   sheet.appendChild(renderTimeField());
+
+  sheet.appendChild(renderMedsSection());
 
   sheet.appendChild(el('div', {class:'field-label'}, 'Note (optional)'));
   const noteInput = el('textarea', {class:'note-input', rows:'2', placeholder:'e.g. left side, fussy after'}, state.note);
@@ -780,6 +968,8 @@ function renderLog(root){
   root.appendChild(main);
   if(state.modal === 'feed') root.appendChild(renderFeedModal());
   if(state.modal === 'diaper') root.appendChild(renderDiaperModal());
+  if(state.medsScreen === 'select') root.appendChild(renderMedsSelectOverlay());
+  if(state.medsScreen === 'add') root.appendChild(renderMedsAddOverlay());
   if(state.toast) root.appendChild(renderToast());
 }
 
