@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#ffffff">
+<title>CozyLog</title>
+<style>
+  :root{
+    --bg: #FDF5F6;
+    --ink: #3B2E33;
+    --ink-soft: #8A7680;
+    --line: #F1DCE2;
+    --feed: #D97C93;
+    --feed-deep: #BD5E77;
+    --diaper: #E39B6E;
+    --diaper-deep: #C87C4E;
+    --log: #A78BC4;
+    --log-deep: #8768A8;
+    --card: #FFFFFF;
+    --radius: 22px;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html{ background:#ffffff; height:100%; }
+  body{
+    margin:0;
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", Inter, sans-serif;
+    background-color: var(--bg);
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIj4KPHRleHQgeD0iNiIgeT0iMzQiIGZvbnQtc2l6ZT0iMjQiIG9wYWNpdHk9IjAuMzUiPvCfjoA8L3RleHQ+Cjx0ZXh0IHg9IjY2IiB5PSI5NiIgZm9udC1zaXplPSIyMCIgb3BhY2l0eT0iMC4zIj7wn5KVPC90ZXh0Pgo8L3N2Zz4=");
+    background-repeat: repeat;
+    background-size: 120px 120px;
+    color: var(--ink);
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+  }
+  #app{
+    width:100%;
+    max-width:480px;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    padding: env(safe-area-inset-top) 18px calc(env(safe-area-inset-bottom) + 18px);
+  }
+  header{
+    padding: 22px 4px 6px;
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+  }
+  .brand{
+    font-family: "Georgia", "Iowan Old Style", serif;
+    font-size: 26px;
+    letter-spacing: 0.2px;
+    font-weight: 600;
+  }
+  .brand span{ color: var(--feed); }
+  .whoami{
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
+    padding: 5px 10px;
+    border-radius: 20px;
+    background: var(--card);
+  }
+  main{ flex:1; display:flex; flex-direction:column; gap:14px; padding-top: 10px; }
+
+  .stack-btn{
+    border:none;
+    border-radius: var(--radius);
+    padding: 22px 22px;
+    display:flex;
+    align-items:center;
+    gap:16px;
+    font-family: inherit;
+    color: white;
+    text-align:left;
+    cursor:pointer;
+    transition: transform .12s ease;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+  }
+  .stack-btn:active{ transform: scale(0.97); }
+  .stack-btn .icon{
+    font-size: 30px;
+    width: 52px; height:52px;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(255,255,255,0.18);
+    border-radius: 16px;
+    flex-shrink:0;
+  }
+  .stack-btn .label{ font-size: 20px; font-weight: 600; }
+  .stack-btn .sub{ font-size: 13px; opacity:0.85; margin-top:2px; font-weight:400; }
+  .btn-feed{ background: linear-gradient(135deg, var(--feed), var(--feed-deep)); }
+  .btn-diaper{ background: linear-gradient(135deg, var(--diaper), var(--diaper-deep)); }
+  .btn-log{ background: linear-gradient(135deg, var(--log), var(--log-deep)); }
+
+  .recent{
+    margin-top: 6px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 14px 16px;
+  }
+  .recent h3{
+    margin:0 0 8px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+  .recent-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding: 8px 0;
+    border-top: 1px solid var(--line);
+    font-size: 14.5px;
+  }
+  .recent-row:first-of-type{ border-top:none; }
+  .recent-row .dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .recent-row .meta{ color: var(--ink-soft); font-size:12.5px; margin-left:auto; text-align:right; }
+  .empty{ color: var(--ink-soft); font-size: 14px; padding: 6px 0; }
+  .export-btn{
+    background: var(--card); border:1px solid var(--line); border-radius:16px;
+    padding: 13px; font-size:14px; font-weight:600; color: var(--log-deep);
+    cursor:pointer; font-family:inherit; margin-top:2px;
+  }
+
+  /* Modal */
+  .overlay{
+    position:fixed; inset:0; background: rgba(30,26,20,0.42);
+    display:flex; align-items:flex-end; justify-content:center;
+    z-index: 50;
+  }
+  .sheet{
+    width:100%; max-width:480px;
+    background: var(--bg);
+    border-radius: 26px 26px 0 0;
+    padding: 22px 20px calc(env(safe-area-inset-bottom) + 22px);
+    animation: rise .22s ease-out;
+  }
+  @keyframes rise{ from{ transform: translateY(24px); opacity:0 } to{ transform:translateY(0); opacity:1 } }
+  .sheet h2{ margin: 0 0 4px; font-size: 20px; }
+  .sheet .hint{ color: var(--ink-soft); font-size: 13px; margin-bottom: 18px; }
+  .field-label{ font-size: 12.5px; color: var(--ink-soft); font-weight:600; text-transform:uppercase; letter-spacing:0.4px; margin: 14px 0 8px; }
+  .amount-row{ display:flex; align-items:center; gap:12px; }
+  .amount-input{
+    flex:1;
+    font-size: 34px;
+    font-weight:700;
+    border:none;
+    background:transparent;
+    color: var(--ink);
+    outline:none;
+    width: 100%;
+    font-family: inherit;
+  }
+  .unit-toggle{ display:flex; background: var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .unit-toggle button{
+    border:none; background:transparent; padding: 10px 14px; font-size:14px; font-weight:600; color: var(--ink-soft); cursor:pointer;
+  }
+  .unit-toggle button.active{ background: var(--feed); color:white; }
+  .time-row{ display:flex; align-items:center; gap:10px; }
+  .time-input{
+    width: 64px; text-align:center; font-size:22px; font-weight:700;
+    border:1px solid var(--line); border-radius:14px; padding:12px 8px;
+    font-family:inherit; background:var(--card); color:var(--ink); outline:none;
+  }
+  .time-colon{ font-size:22px; font-weight:700; color: var(--ink-soft); }
+  .ampm-toggle{
+    border:1px solid var(--line); background:var(--card); border-radius:14px;
+    padding:12px 18px; font-size:15px; font-weight:700; color: var(--ink); cursor:pointer; font-family:inherit;
+  }
+  .note-input{
+    width:100%; border:1px solid var(--line); border-radius:14px; padding:12px 14px;
+    font-size:15px; font-family:inherit; background:var(--card); color:var(--ink); resize:none;
+  }
+  .chip-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .chip{
+    border:1px solid var(--line); background:var(--card); border-radius:14px; padding:10px 16px;
+    font-size:14px; font-weight:600; color:var(--ink); cursor:pointer;
+  }
+  .chip.active{ background: var(--diaper); border-color: var(--diaper); color:white; }
+  .sheet-actions{ display:flex; gap:10px; margin-top:22px; }
+  .btn-secondary, .btn-primary{
+    flex:1; border:none; border-radius:16px; padding:16px; font-size:16px; font-weight:600; font-family:inherit; cursor:pointer;
+  }
+  .btn-secondary{ background: var(--card); color: var(--ink-soft); border:1px solid var(--line); }
+  .btn-primary{ background: var(--feed); color:white; }
+  .btn-primary.diaper{ background: var(--diaper); }
+  .delete-link{
+    display:block; width:100%; margin-top:14px; background:none; border:none;
+    color:#B4415A; font-size:14px; font-weight:600; text-align:center; padding:6px; cursor:pointer;
+  }
+
+  /* Calendar / Log view */
+  .day-nav{
+    display:flex; align-items:center; justify-content:space-between;
+    background: var(--card); border:1px solid var(--line); border-radius:18px;
+    padding: 10px 6px; margin-bottom: 14px;
+  }
+  .day-nav button{
+    border:none; background:transparent; font-size:20px; padding: 8px 16px; color: var(--log); cursor:pointer;
+  }
+  .day-nav .day-label{ font-weight:600; font-size:15px; }
+  .day-nav .day-sub{ font-size:12px; color:var(--ink-soft); text-align:center; }
+  .day-nav .day-stats{ font-size:12.5px; color: var(--feed-deep); text-align:center; font-weight:600; margin-top:4px; }
+
+  .timeline{ display:flex; flex-direction:column; gap:10px; }
+  .event-card{
+    background: var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:14px 16px; display:flex; align-items:center; gap:12px; cursor:pointer;
+  }
+  .event-card:active{ background: #FBF0F2; }
+  .event-card .ico{
+    width:40px; height:40px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:19px; color:white; flex-shrink:0;
+  }
+  .event-card .ico.feed{ background: var(--feed); }
+  .event-card .ico.diaper{ background: var(--diaper); }
+  .event-card .details{ flex:1; }
+  .event-card .title{ font-weight:600; font-size:15px; }
+  .event-card .desc{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+  .event-card .time{ font-size:12.5px; color: var(--ink-soft); font-weight:600; white-space:nowrap; }
+  .day-empty{ text-align:center; color:var(--ink-soft); padding: 40px 10px; font-size:14px; }
+
+  .back-row{ display:flex; align-items:center; gap:8px; margin-bottom: 6px; }
+  .back-btn{ border:none; background:transparent; font-size:15px; color: var(--log); font-weight:600; padding:6px 0; cursor:pointer; }
+
+  .toast{
+    position:fixed; bottom: 30px; left:50%; transform: translateX(-50%);
+    background: var(--ink); color:white; padding: 12px 20px; border-radius: 30px;
+    font-size:14px; z-index: 100; display:flex; align-items:center; gap:10px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+  }
+  .toast button{ background:none; border:none; color:#F2B6C6; font-weight:700; font-size:13px; cursor:pointer; }
+
+  .id-screen{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:18px; padding: 0 6px; }
+  .id-screen h1{ font-family:"Georgia", serif; font-size:28px; margin:0; }
+  .id-screen p{ color:var(--ink-soft); font-size:14.5px; margin:0; line-height:1.5; }
+  .name-input{
+    font-size:20px; padding:16px; border-radius:16px; border:1px solid var(--line); background:var(--card); font-family:inherit; outline:none;
+  }
+  .id-screen .go{
+    background: var(--feed); color:white; border:none; border-radius:16px; padding:16px; font-size:16px; font-weight:600; cursor:pointer;
+  }
+  .loading{ text-align:center; color:var(--ink-soft); padding:30px; font-size:14px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDL0tnuwR7qq6GNqUk0qkeudGkC_aUcaRM",
+  authDomain: "babyos-ed99c.firebaseapp.com",
+  projectId: "babyos-ed99c",
+  storageBucket: "babyos-ed99c.firebasestorage.app",
+  messagingSenderId: "240011309463",
+  appId: "1:240011309463:web:a8b8b768df2e494c4d54d2",
+  measurementId: "G-CWSXTCXNZN"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
+const eventsDocRef = doc(db, "cozylog", "shared");
+
+const state = {
+  screen: 'loading', // loading | home | log
+  events: [],
+  viewDate: startOfDay(new Date()),
+  modal: null, // 'feed' | 'diaper'
+  editingId: null,
+  feedAmount: '',
+  feedUnit: 'oz',
+  diaperType: 'dirty',
+  note: '',
+  entryBaseDate: null, // ms timestamp at midnight of the entry's date
+  entryHour: '12',
+  entryMinute: '00',
+  entryAmPm: 'AM',
+  toast: null,
+  toastTimer: null,
+};
+
+function startOfDay(d){ const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function sameDay(a,b){ return startOfDay(a).getTime() === startOfDay(b).getTime(); }
+function diaperLabel(t){ return t==='wet' ? 'Pee' : t==='dirty' ? 'Poo' : 'Pee & Poo'; }
+function fmtTime(ts){ return new Date(ts).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}); }
+function fmtDayLabel(d){
+  const today = startOfDay(new Date());
+  if(sameDay(d, today)) return 'Today';
+  const yest = new Date(today); yest.setDate(yest.getDate()-1);
+  if(sameDay(d, yest)) return 'Yesterday';
+  const tom = new Date(today); tom.setDate(tom.getDate()+1);
+  if(sameDay(d, tom)) return 'Tomorrow';
+  return d.toLocaleDateString([], {weekday:'long', month:'short', day:'numeric'});
+}
+function fmtDaySub(d){ return d.toLocaleDateString([], {year:'numeric', month:'long', day:'numeric'}); }
+
+function setEntryTimeFromDate(d){
+  state.entryBaseDate = startOfDay(d).getTime();
+  let h = d.getHours();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if(h === 0) h = 12;
+  state.entryHour = String(h);
+  state.entryMinute = String(d.getMinutes()).padStart(2,'0');
+  state.entryAmPm = ampm;
+}
+
+function computeEntryTimestamp(){
+  const base = new Date(state.entryBaseDate !== null ? state.entryBaseDate : startOfDay(new Date()));
+  let h = parseInt(state.entryHour, 10);
+  let m = parseInt(state.entryMinute, 10);
+  if(isNaN(h) || h < 1) h = 12;
+  if(h > 12) h = 12;
+  if(isNaN(m) || m < 0) m = 0;
+  if(m > 59) m = 59;
+  if(state.entryAmPm === 'PM' && h !== 12) h += 12;
+  if(state.entryAmPm === 'AM' && h === 12) h = 0;
+  base.setHours(h, m, 0, 0);
+  return base.getTime();
+}
+
+let unsubscribeEvents = null;
+
+function startListeningForEvents(){
+  unsubscribeEvents = onSnapshot(eventsDocRef, (snap)=>{
+    const data = snap.exists() ? snap.data() : null;
+    state.events = (data && Array.isArray(data.events)) ? data.events : [];
+    if(state.screen === 'loading') state.screen = 'home';
+    render();
+  }, (err)=>{
+    console.error('Firestore listen failed', err);
+    if(state.screen === 'loading') state.screen = 'home';
+    showToast('Could not connect — check your internet connection');
+    render();
+  });
+}
+
+async function saveEvents(){
+  await setDoc(eventsDocRef, { events: state.events });
+}
+
+function csvEscape(val){
+  const s = String(val === undefined || val === null ? '' : val);
+  if(/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function exportCSV(){
+  if(state.events.length === 0){
+    showToast('No entries to export yet');
+    return;
+  }
+  const rows = [['Date', 'Time', 'Type', 'Amount', 'Unit', 'Diaper Type', 'Note']];
+  const sorted = [...state.events].sort((a,b)=>a.timestamp-b.timestamp);
+  sorted.forEach(ev=>{
+    const d = new Date(ev.timestamp);
+    const dateStr = d.toLocaleDateString('en-CA');
+    const timeStr = fmtTime(ev.timestamp);
+    if(ev.type === 'feed'){
+      rows.push([dateStr, timeStr, 'Feeding', ev.amount, ev.unit, '', ev.note || '']);
+    } else {
+      rows.push([dateStr, timeStr, 'Diaper', '', '', diaperLabel(ev.diaperType), ev.note || '']);
+    }
+  });
+  const csv = rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cozylog-export-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+
+function showToast(msg, undoFn){
+  state.toast = {msg, undoFn};
+  render();
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(()=>{ state.toast = null; render(); }, 4000);
+}
+
+async function init(){
+  render();
+  startListeningForEvents();
+}
+
+function closeModal(){
+  state.modal = null;
+  state.editingId = null;
+  state.feedAmount = '';
+  state.note = '';
+  render();
+}
+
+function openNewEntry(type){
+  state.editingId = null;
+  state.modal = type;
+  state.feedAmount = '';
+  state.note = '';
+  if(type==='diaper') state.diaperType = 'dirty';
+  setEntryTimeFromDate(new Date());
+  render();
+}
+
+function openEditEntry(ev){
+  state.editingId = ev.id;
+  state.note = ev.note || '';
+  if(ev.type === 'feed'){
+    state.modal = 'feed';
+    state.feedAmount = String(ev.amount);
+    state.feedUnit = ev.unit;
+  } else {
+    state.modal = 'diaper';
+    state.diaperType = ev.diaperType;
+  }
+  setEntryTimeFromDate(new Date(ev.timestamp));
+  render();
+}
+
+async function deleteEditingEntry(){
+  if(!state.editingId) return;
+  if(!window.confirm('Delete this entry? This can\'t be undone.')) return;
+  const id = state.editingId;
+  state.events = state.events.filter(e=>e.id!==id);
+  closeModal();
+  try{ await saveEvents(); showToast('Entry deleted'); }
+  catch(e){ showToast('Could not save — check connection'); }
+}
+
+async function logDiaper(type){
+  const ts = computeEntryTimestamp();
+  if(state.editingId){
+    const idx = state.events.findIndex(e=>e.id===state.editingId);
+    if(idx === -1) return;
+    state.events[idx] = {...state.events[idx], diaperType: type, note: state.note.trim(), timestamp: ts};
+    closeModal();
+    try{ await saveEvents(); showToast('Entry updated'); }
+    catch(e){ showToast('Could not save — check connection'); }
+    return;
+  }
+  const ev = { id: 'e'+Date.now()+Math.random().toString(36).slice(2,7), type:'diaper', diaperType: type, timestamp: ts, note: state.note.trim() };
+  state.events.push(ev);
+  state.note = '';
+  state.modal = null;
+  render();
+  try{
+    await saveEvents();
+    showToast(`Logged ${diaperLabel(type)} at ${fmtTime(ev.timestamp)}`, async ()=>{
+      state.events = state.events.filter(e=>e.id!==ev.id);
+      render();
+      await saveEvents();
+    });
+  }catch(e){ showToast('Could not save — check connection'); }
+}
+
+async function logFeed(){
+  const amt = parseFloat(state.feedAmount);
+  if(!amt || amt <= 0) return;
+  const ts = computeEntryTimestamp();
+  if(state.editingId){
+    const idx = state.events.findIndex(e=>e.id===state.editingId);
+    if(idx === -1) return;
+    state.events[idx] = {...state.events[idx], amount: amt, unit: state.feedUnit, note: state.note.trim(), timestamp: ts};
+    closeModal();
+    try{ await saveEvents(); showToast('Entry updated'); }
+    catch(e){ showToast('Could not save — check connection'); }
+    return;
+  }
+  const ev = { id:'e'+Date.now()+Math.random().toString(36).slice(2,7), type:'feed', amount: amt, unit: state.feedUnit, timestamp: ts, note: state.note.trim() };
+  state.events.push(ev);
+  state.feedAmount = '';
+  state.note = '';
+  state.modal = null;
+  render();
+  try{
+    await saveEvents();
+    showToast(`Logged ${amt}${state.feedUnit} feed at ${fmtTime(ev.timestamp)}`, async ()=>{
+      state.events = state.events.filter(e=>e.id!==ev.id);
+      render();
+      await saveEvents();
+    });
+  }catch(e){ showToast('Could not save — check connection'); }
+}
+
+function el(tag, attrs={}, children=[]){
+  const e = document.createElement(tag);
+  for(const [k,v] of Object.entries(attrs)){
+    if(k === 'class') e.className = v;
+    else if(k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2), v);
+    else if(k === 'html') e.innerHTML = v;
+    else e.setAttribute(k, v);
+  }
+  (Array.isArray(children)?children:[children]).forEach(c=>{
+    if(c === null || c === undefined) return;
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  });
+  return e;
+}
+
+function recentEvents(){
+  return [...state.events].sort((a,b)=>b.timestamp-a.timestamp).slice(0,4);
+}
+
+function renderHome(root){
+  const header = el('header', {}, [
+    el('div', {class:'brand'}, ['Cozy', el('span', {}, 'Log')])
+  ]);
+  root.appendChild(header);
+
+  const main = el('main');
+  main.appendChild(el('button', {class:'stack-btn btn-feed', onclick: ()=>openNewEntry('feed')}, [
+    el('div', {class:'icon'}, '🍼'),
+    el('div', {}, [el('div', {class:'label'}, 'Feeding'), el('div', {class:'sub'}, 'Log a bottle or nursing session')])
+  ]));
+  main.appendChild(el('button', {class:'stack-btn btn-diaper', onclick: ()=>openNewEntry('diaper')}, [
+    el('div', {class:'icon'}, '💩'),
+    el('div', {}, [el('div', {class:'label'}, 'Diaper'), el('div', {class:'sub'}, 'One tap to log a change')])
+  ]));
+  main.appendChild(el('button', {class:'stack-btn btn-log', onclick: ()=>{ state.viewDate = startOfDay(new Date()); state.screen='log'; render(); }}, [
+    el('div', {class:'icon'}, '📅'),
+    el('div', {}, [el('div', {class:'label'}, 'Daily Log'), el('div', {class:'sub'}, "View today's events")])
+  ]));
+
+  const recent = recentEvents();
+  const card = el('div', {class:'recent'});
+  card.appendChild(el('h3', {}, 'Recent'));
+  if(recent.length === 0){
+    card.appendChild(el('div', {class:'empty'}, 'Nothing logged yet today.'));
+  } else {
+    recent.forEach(ev=>{
+      const isFeed = ev.type === 'feed';
+      const row = el('div', {class:'recent-row', style:'cursor:pointer', onclick: ()=>openEditEntry(ev)}, [
+        el('span', {class:'dot', style:`background:${isFeed?'var(--feed)':'var(--diaper)'}`}),
+        el('span', {}, isFeed ? `Feeding — ${ev.amount}${ev.unit}` : `Diaper — ${diaperLabel(ev.diaperType)}`),
+        el('span', {class:'meta'}, fmtTime(ev.timestamp))
+      ]);
+      card.appendChild(row);
+    });
+  }
+  main.appendChild(card);
+  main.appendChild(el('button', {class:'export-btn', onclick: exportCSV}, '⬇ Export all entries as CSV'));
+  root.appendChild(main);
+
+  if(state.modal === 'feed') root.appendChild(renderFeedModal());
+  if(state.modal === 'diaper') root.appendChild(renderDiaperModal());
+  if(state.toast) root.appendChild(renderToast());
+}
+
+function renderTimeField(){
+  const wrap = el('div', {class:'time-row'});
+
+  const hourInput = el('input', {class:'time-input', type:'number', inputmode:'numeric', min:'1', max:'12', value: state.entryHour});
+  hourInput.addEventListener('input', (e)=>{ state.entryHour = e.target.value; });
+  hourInput.addEventListener('blur', (e)=>{
+    let h = parseInt(e.target.value, 10);
+    if(isNaN(h) || h < 1) h = 12;
+    if(h > 12) h = 12;
+    state.entryHour = String(h);
+    render();
+  });
+
+  const minuteInput = el('input', {class:'time-input', type:'number', inputmode:'numeric', min:'0', max:'59', value: state.entryMinute});
+  minuteInput.addEventListener('input', (e)=>{ state.entryMinute = e.target.value; });
+  minuteInput.addEventListener('blur', (e)=>{
+    let m = parseInt(e.target.value, 10);
+    if(isNaN(m) || m < 0) m = 0;
+    if(m > 59) m = 59;
+    state.entryMinute = String(m).padStart(2,'0');
+    render();
+  });
+
+  const ampmBtn = el('button', {
+    class: 'ampm-toggle',
+    onclick: ()=>{ state.entryAmPm = state.entryAmPm === 'AM' ? 'PM' : 'AM'; render(); }
+  }, state.entryAmPm);
+
+  wrap.appendChild(hourInput);
+  wrap.appendChild(el('span', {class:'time-colon'}, ':'));
+  wrap.appendChild(minuteInput);
+  wrap.appendChild(ampmBtn);
+  return wrap;
+}
+
+function renderFeedModal(){
+  const isEdit = !!state.editingId;
+  const overlay = el('div', {class:'overlay', onclick:(e)=>{ if(e.target===overlay) closeModal(); }});
+  const sheet = el('div', {class:'sheet'});
+  sheet.appendChild(el('h2', {}, isEdit ? '🍼 Edit feeding' : '🍼 Feeding'));
+  sheet.appendChild(el('div', {class:'hint'}, 'How much did Coz drink?'));
+
+  const unitToggle = el('div', {class:'unit-toggle'});
+  ['oz','ml'].forEach(u=>{
+    unitToggle.appendChild(el('button', {
+      class: state.feedUnit===u ? 'active' : '',
+      onclick: ()=>{ state.feedUnit = u; render(); }
+    }, u));
+  });
+
+  const amountInput = el('input', {class:'amount-input', type:'number', inputmode:'decimal', placeholder:'0', value: state.feedAmount});
+  amountInput.addEventListener('input', (e)=>{ state.feedAmount = e.target.value; });
+
+  sheet.appendChild(el('div', {class:'amount-row'}, [amountInput, unitToggle]));
+
+  sheet.appendChild(el('div', {class:'field-label'}, 'Time'));
+  sheet.appendChild(renderTimeField());
+
+  sheet.appendChild(el('div', {class:'field-label'}, 'Note (optional)'));
+  const noteInput = el('textarea', {class:'note-input', rows:'2', placeholder:'e.g. left side, fussy after'}, state.note);
+  noteInput.addEventListener('input', (e)=>{ state.note = e.target.value; });
+  sheet.appendChild(noteInput);
+
+  const actions = el('div', {class:'sheet-actions'});
+  actions.appendChild(el('button', {class:'btn-secondary', onclick: closeModal}, 'Cancel'));
+  actions.appendChild(el('button', {class:'btn-primary', onclick: logFeed}, 'Save'));
+  sheet.appendChild(actions);
+
+  if(isEdit){
+    sheet.appendChild(el('button', {class:'delete-link', onclick: deleteEditingEntry}, 'Delete entry'));
+  }
+
+  overlay.appendChild(sheet);
+  setTimeout(()=>amountInput.focus(), 50);
+  return overlay;
+}
+
+function renderDiaperModal(){
+  const isEdit = !!state.editingId;
+  const overlay = el('div', {class:'overlay', onclick:(e)=>{ if(e.target===overlay) closeModal(); }});
+  const sheet = el('div', {class:'sheet'});
+  sheet.appendChild(el('h2', {}, isEdit ? '💩 Edit diaper change' : '💩 Diaper change'));
+  sheet.appendChild(el('div', {class:'hint'}, 'What kind?'));
+
+  const chips = el('div', {class:'chip-row'});
+  [['wet','💧 Pee'],['dirty','💩 Poo'],['both','💧💩 Both']].forEach(([val,label])=>{
+    chips.appendChild(el('button', {
+      class: 'chip' + (state.diaperType===val ? ' active' : ''),
+      onclick: ()=>{ state.diaperType = val; render(); }
+    }, label));
+  });
+  sheet.appendChild(chips);
+
+  sheet.appendChild(el('div', {class:'field-label'}, 'Time'));
+  sheet.appendChild(renderTimeField());
+
+  sheet.appendChild(el('div', {class:'field-label'}, 'Note (optional)'));
+  const noteInput = el('textarea', {class:'note-input', rows:'2', placeholder:'e.g. slight rash, blowout'}, state.note);
+  noteInput.addEventListener('input', (e)=>{ state.note = e.target.value; });
+  sheet.appendChild(noteInput);
+
+  const actions = el('div', {class:'sheet-actions'});
+  actions.appendChild(el('button', {class:'btn-secondary', onclick: closeModal}, 'Cancel'));
+  actions.appendChild(el('button', {class:'btn-primary diaper', onclick: ()=>logDiaper(state.diaperType)}, 'Save'));
+  sheet.appendChild(actions);
+
+  if(isEdit){
+    sheet.appendChild(el('button', {class:'delete-link', onclick: deleteEditingEntry}, 'Delete entry'));
+  }
+
+  overlay.appendChild(sheet);
+  return overlay;
+}
+
+function renderToast(){
+  const t = el('div', {class:'toast'}, [el('span', {}, state.toast.msg)]);
+  if(state.toast.undoFn){
+    t.appendChild(el('button', {onclick: async ()=>{ await state.toast.undoFn(); state.toast=null; render(); }}, 'UNDO'));
+  }
+  return t;
+}
+
+function renderLog(root){
+  const header = el('header', {}, [
+    el('div', {class:'brand'}, ['Cozy', el('span', {}, 'Log')])
+  ]);
+  root.appendChild(header);
+
+  const main = el('main');
+  main.appendChild(el('div', {class:'back-row'}, [
+    el('button', {class:'back-btn', onclick: ()=>{ state.screen='home'; render(); }}, '‹ Home')
+  ]));
+
+  const dayEvents = state.events
+    .filter(ev => sameDay(new Date(ev.timestamp), state.viewDate))
+    .sort((a,b)=>b.timestamp-a.timestamp);
+
+  const feedEvents = dayEvents.filter(ev => ev.type === 'feed');
+  const feedCount = feedEvents.length;
+  const totalMl = Math.round(feedEvents.reduce((sum, ev) => {
+    const ml = ev.unit === 'ml' ? ev.amount : ev.amount * 29.5735;
+    return sum + ml;
+  }, 0));
+
+  const nav = el('div', {class:'day-nav'}, [
+    el('button', {onclick: ()=>{ state.viewDate = new Date(state.viewDate.getTime() - 86400000); render(); }}, '‹'),
+    el('div', {}, [
+      el('div', {class:'day-label'}, fmtDayLabel(state.viewDate)),
+      el('div', {class:'day-sub'}, fmtDaySub(state.viewDate)),
+      el('div', {class:'day-stats'}, `${feedCount} feeding${feedCount===1?'':'s'} · ${totalMl} mL total`)
+    ]),
+    el('button', {onclick: ()=>{ state.viewDate = new Date(state.viewDate.getTime() + 86400000); render(); }}, '›')
+  ]);
+  main.appendChild(nav);
+
+  if(dayEvents.length === 0){
+    main.appendChild(el('div', {class:'day-empty'}, 'No events logged for this day.'));
+  } else {
+    const timeline = el('div', {class:'timeline'});
+    dayEvents.forEach(ev=>{
+      const isFeed = ev.type === 'feed';
+      const card = el('div', {class:'event-card', onclick: ()=>openEditEntry(ev)}, [
+        el('div', {class:'ico ' + (isFeed?'feed':'diaper')}, isFeed ? '🍼' : '💩'),
+        el('div', {class:'details'}, [
+          el('div', {class:'title'}, isFeed ? `Feeding — ${ev.amount}${ev.unit}` : `Diaper — ${diaperLabel(ev.diaperType)}`),
+          el('div', {class:'desc'}, ev.note ? ev.note : '')
+        ]),
+        el('div', {class:'time'}, fmtTime(ev.timestamp))
+      ]);
+      timeline.appendChild(card);
+    });
+    main.appendChild(timeline);
+  }
+  root.appendChild(main);
+  if(state.modal === 'feed') root.appendChild(renderFeedModal());
+  if(state.modal === 'diaper') root.appendChild(renderDiaperModal());
+  if(state.toast) root.appendChild(renderToast());
+}
+
+function render(){
+  const root = document.getElementById('app');
+  root.innerHTML = '';
+  if(state.screen === 'loading'){
+    root.appendChild(el('div', {class:'loading'}, 'Loading CozyLog…'));
+    return;
+  }
+  if(state.screen === 'home') return renderHome(root);
+  if(state.screen === 'log') return renderLog(root);
+}
+
+init();
+</script>
+</body>
+</html>
