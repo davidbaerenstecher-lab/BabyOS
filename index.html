@@ -257,7 +257,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
-import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentSingleTabManager, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDL0tnuwR7qq6GNqUk0qkeudGkC_aUcaRM",
@@ -270,7 +270,16 @@ const firebaseConfig = {
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp);
+let db;
+try{
+  // Persists events locally (IndexedDB) so reloads show the last-synced
+  // state instantly instead of blocking on a fresh network round-trip.
+  db = initializeFirestore(firebaseApp, {
+    localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+  });
+}catch(e){
+  db = getFirestore(firebaseApp);
+}
 const eventsDocRef = doc(db, "cozylog", "shared");
 
 const state = {
