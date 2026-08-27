@@ -22,6 +22,8 @@
     --diaper-deep: #C87C4E;
     --log: #A78BC4;
     --log-deep: #8768A8;
+    --activity: #7FB77E;
+    --activity-deep: #5E9B5D;
     --card: #FFFFFF;
     --radius: 22px;
   }
@@ -98,6 +100,7 @@
   .btn-feed{ background: linear-gradient(135deg, var(--feed), var(--feed-deep)); }
   .btn-diaper{ background: linear-gradient(135deg, var(--diaper), var(--diaper-deep)); }
   .btn-log{ background: linear-gradient(135deg, var(--log), var(--log-deep)); }
+  .btn-activity{ background: linear-gradient(135deg, var(--activity), var(--activity-deep)); }
 
   .recent{
     margin-top: 6px;
@@ -210,6 +213,19 @@
   .med-check{ font-size:18px; font-weight:700; color: var(--feed); width:20px; text-align:center; flex-shrink:0; }
   .med-row-actions{ display:flex; align-items:center; gap:12px; flex-shrink:0; }
   .med-edit-btn{ border:none; background:none; font-size:16px; padding:4px; line-height:1; cursor:pointer; }
+  .select-field{
+    width:100%; display:flex; align-items:center; justify-content:space-between;
+    border:1px solid var(--line); border-radius:14px; padding:12px 14px;
+    font-size:15px; font-weight:600; font-family:inherit; background:var(--card); color:var(--ink); cursor:pointer;
+  }
+  .select-field .placeholder{ color: var(--ink-soft); font-weight:400; }
+  .select-field .chev{ color: var(--ink-soft); font-size:14px; }
+  .timer-btn{
+    width:120px; height:120px; border-radius:50%; border:none;
+    background: var(--activity); color:white; font-size:20px; font-weight:700;
+    cursor:pointer; font-family:inherit; box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+  }
+  .timer-btn.running{ background: #C75450; }
   .sheet-actions{ display:flex; gap:10px; margin-top:22px; }
   .btn-secondary, .btn-primary{
     flex:1; border:none; border-radius:16px; padding:16px; font-size:16px; font-weight:600; font-family:inherit; cursor:pointer;
@@ -217,6 +233,7 @@
   .btn-secondary{ background: var(--card); color: var(--ink-soft); border:1px solid var(--line); }
   .btn-primary{ background: var(--feed); color:white; }
   .btn-primary.diaper{ background: var(--diaper); }
+  .btn-primary.activity{ background: var(--activity); }
   .delete-link{
     display:block; width:100%; margin-top:14px; background:none; border:none;
     color:#B4415A; font-size:14px; font-weight:600; text-align:center; padding:6px; cursor:pointer;
@@ -247,6 +264,7 @@
   }
   .event-card .ico.feed{ background: var(--feed); }
   .event-card .ico.diaper{ background: var(--diaper); }
+  .event-card .ico.activity{ background: var(--activity); }
   .event-card .details{ flex:1; }
   .event-card .title{ font-weight:600; font-size:15px; }
   .event-card .desc{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
@@ -310,8 +328,9 @@ const state = {
   screen: 'loading', // loading | home | log
   events: [],
   meds: [], // saved medications: {id, name, unit, amount, note}
+  activities: [], // saved activity types: {id, name}
   viewDate: startOfDay(new Date()),
-  modal: null, // 'feed' | 'diaper'
+  modal: null, // 'feed' | 'diaper' | 'activity'
   editingId: null,
   feedAmount: '',
   feedUnit: 'ml',
@@ -328,6 +347,16 @@ const state = {
   newMedUnit: 'mL',
   newMedAmount: '',
   newMedNote: '',
+  activityScreen: null, // null | 'select' | 'add'
+  selectedActivityId: null,
+  editingActivityTypeId: null, // set when the add/edit screen is editing an existing saved activity type
+  newActivityName: '',
+  activityDuration: '',
+  activityMode: 'manual', // 'manual' | 'timer'
+  timerRunning: false,
+  timerStartedAt: null, // ms epoch when the running timer started
+  timerElapsedMs: 0, // finalized elapsed time once stopped
+  timerIntervalId: null,
   toast: null,
   toastTimer: null,
 };
@@ -390,6 +419,7 @@ function startListeningForEvents(){
     const data = snap.exists() ? snap.data() : null;
     state.events = (data && Array.isArray(data.events)) ? data.events : [];
     state.meds = (data && Array.isArray(data.meds)) ? data.meds : [];
+    state.activities = (data && Array.isArray(data.activities)) ? data.activities : [];
     if(state.screen === 'loading') state.screen = 'home';
     render();
   }, (err)=>{
@@ -401,7 +431,7 @@ function startListeningForEvents(){
 }
 
 async function saveEvents(){
-  await setDoc(eventsDocRef, { events: state.events, meds: state.meds });
+  await setDoc(eventsDocRef, { events: state.events, meds: state.meds, activities: state.activities });
 }
 
 function csvEscape(val){
@@ -415,16 +445,18 @@ function exportCSV(){
     showToast('No entries to export yet');
     return;
   }
-  const rows = [['Date', 'Time', 'Type', 'Amount', 'Unit', 'Diaper Type', 'Note']];
+  const rows = [['Date', 'Time', 'Type', 'Amount', 'Unit', 'Diaper Type', 'Activity', 'Duration (min)', 'Note']];
   const sorted = [...state.events].sort((a,b)=>a.timestamp-b.timestamp);
   sorted.forEach(ev=>{
     const d = new Date(ev.timestamp);
     const dateStr = d.toLocaleDateString('en-CA');
     const timeStr = fmtTime(ev.timestamp);
     if(ev.type === 'feed'){
-      rows.push([dateStr, timeStr, 'Feeding', ev.amount, ev.unit, '', ev.note || '']);
-    } else {
-      rows.push([dateStr, timeStr, 'Diaper', '', '', diaperLabel(ev.diaperType), ev.note || '']);
+      rows.push([dateStr, timeStr, 'Feeding', ev.amount, ev.unit, '', '', '', ev.note || '']);
+    } else if(ev.type === 'diaper'){
+      rows.push([dateStr, timeStr, 'Diaper', '', '', diaperLabel(ev.diaperType), '', '', ev.note || '']);
+    } else if(ev.type === 'activity'){
+      rows.push([dateStr, timeStr, 'Activity', '', '', '', ev.activityName || '', ev.durationMinutes, ev.note || '']);
     }
   });
   const csv = rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
@@ -451,6 +483,22 @@ async function init(){
   startListeningForEvents();
 }
 
+function resetActivityTimer(){
+  if(state.timerIntervalId){ clearInterval(state.timerIntervalId); state.timerIntervalId = null; }
+  state.timerRunning = false;
+  state.timerStartedAt = null;
+  state.timerElapsedMs = 0;
+}
+
+function resetActivityFields(){
+  state.activityScreen = null;
+  state.selectedActivityId = null;
+  state.editingActivityTypeId = null;
+  state.activityDuration = '';
+  state.activityMode = 'manual';
+  resetActivityTimer();
+}
+
 function closeModal(){
   state.modal = null;
   state.editingId = null;
@@ -459,6 +507,7 @@ function closeModal(){
   state.medsScreen = null;
   state.selectedMedIds = [];
   state.editingMedId = null;
+  resetActivityFields();
   render();
 }
 
@@ -469,6 +518,8 @@ function openNewEntry(type){
   state.note = '';
   state.medsScreen = null;
   state.selectedMedIds = [];
+  state.editingMedId = null;
+  resetActivityFields();
   if(type==='diaper') state.diaperType = 'dirty';
   setEntryTimeFromDate(new Date());
   render();
@@ -478,14 +529,20 @@ function openEditEntry(ev){
   state.editingId = ev.id;
   state.note = ev.note || '';
   state.medsScreen = null;
+  resetActivityFields();
   if(ev.type === 'feed'){
     state.modal = 'feed';
     state.feedAmount = String(ev.amount);
     state.feedUnit = ev.unit;
     state.selectedMedIds = (ev.meds || []).map(m=>m.id);
-  } else {
+  } else if(ev.type === 'diaper'){
     state.modal = 'diaper';
     state.diaperType = ev.diaperType;
+    state.selectedMedIds = [];
+  } else if(ev.type === 'activity'){
+    state.modal = 'activity';
+    state.selectedActivityId = ev.activityId || null;
+    state.activityDuration = ev.durationMinutes != null ? String(ev.durationMinutes) : '';
     state.selectedMedIds = [];
   }
   setEntryTimeFromDate(new Date(ev.timestamp));
@@ -571,6 +628,99 @@ async function deleteMed(){
   catch(e){ showToast('Could not save — check connection'); }
 }
 
+function openActivitySelect(){
+  state.activityScreen = 'select';
+  render();
+}
+
+function closeActivityScreen(){
+  state.activityScreen = null;
+  render();
+}
+
+function selectActivity(id){
+  state.selectedActivityId = id;
+  state.activityScreen = null;
+  render();
+}
+
+function openAddActivityType(){
+  state.activityScreen = 'add';
+  state.editingActivityTypeId = null;
+  state.newActivityName = '';
+  render();
+}
+
+function openEditActivityType(act){
+  state.activityScreen = 'add';
+  state.editingActivityTypeId = act.id;
+  state.newActivityName = act.name;
+  render();
+}
+
+function cancelAddActivityType(){
+  state.activityScreen = 'select';
+  state.editingActivityTypeId = null;
+  render();
+}
+
+async function saveActivityType(){
+  const name = state.newActivityName.trim();
+  if(!name) return;
+  if(state.editingActivityTypeId){
+    const idx = state.activities.findIndex(a=>a.id===state.editingActivityTypeId);
+    if(idx !== -1) state.activities[idx] = { ...state.activities[idx], name };
+    state.activityScreen = 'select';
+  } else {
+    const act = { id:'a'+Date.now()+Math.random().toString(36).slice(2,7), name };
+    state.activities.push(act);
+    state.selectedActivityId = act.id;
+    state.activityScreen = null;
+  }
+  state.editingActivityTypeId = null;
+  render();
+  try{ await saveEvents(); }
+  catch(e){ showToast('Could not save — check connection'); }
+}
+
+async function deleteActivityType(){
+  if(!state.editingActivityTypeId) return;
+  if(!window.confirm('Delete this activity type? This can\'t be undone.')) return;
+  const id = state.editingActivityTypeId;
+  state.activities = state.activities.filter(a=>a.id!==id);
+  if(state.selectedActivityId === id) state.selectedActivityId = null;
+  state.activityScreen = 'select';
+  state.editingActivityTypeId = null;
+  render();
+  try{ await saveEvents(); }
+  catch(e){ showToast('Could not save — check connection'); }
+}
+
+function formatElapsed(ms){
+  const totalSec = Math.floor(ms / 1000);
+  const mm = Math.floor(totalSec / 60);
+  const ss = totalSec % 60;
+  return `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+}
+
+function startTimer(){
+  state.timerElapsedMs = 0;
+  state.timerRunning = true;
+  state.timerStartedAt = Date.now();
+  state.timerIntervalId = setInterval(()=>{ render(); }, 1000);
+  render();
+}
+
+function stopTimer(){
+  if(state.timerIntervalId){ clearInterval(state.timerIntervalId); state.timerIntervalId = null; }
+  const elapsed = Date.now() - state.timerStartedAt;
+  state.timerElapsedMs = elapsed;
+  state.timerRunning = false;
+  state.timerStartedAt = null;
+  state.activityDuration = String(Math.round((elapsed / 60000) * 100) / 100);
+  render();
+}
+
 async function deleteEditingEntry(){
   if(!state.editingId) return;
   if(!window.confirm('Delete this entry? This can\'t be undone.')) return;
@@ -637,6 +787,36 @@ async function logFeed(){
   }catch(e){ showToast('Could not save — check connection'); }
 }
 
+async function logActivity(){
+  const dur = parseFloat(state.activityDuration);
+  if(!state.selectedActivityId || !dur || dur <= 0) return;
+  const act = state.activities.find(a=>a.id===state.selectedActivityId);
+  const ts = computeEntryTimestamp();
+  if(state.editingId){
+    const idx = state.events.findIndex(e=>e.id===state.editingId);
+    if(idx === -1) return;
+    state.events[idx] = {...state.events[idx], activityId: state.selectedActivityId, activityName: act ? act.name : state.events[idx].activityName, durationMinutes: dur, note: state.note.trim(), timestamp: ts};
+    closeModal();
+    try{ await saveEvents(); showToast('Entry updated'); }
+    catch(e){ showToast('Could not save — check connection'); }
+    return;
+  }
+  const ev = { id:'e'+Date.now()+Math.random().toString(36).slice(2,7), type:'activity', activityId: state.selectedActivityId, activityName: act ? act.name : '', durationMinutes: dur, timestamp: ts, note: state.note.trim() };
+  state.events.push(ev);
+  resetActivityFields();
+  state.note = '';
+  state.modal = null;
+  render();
+  try{
+    await saveEvents();
+    showToast(`Logged ${ev.activityName} — ${dur} min`, async ()=>{
+      state.events = state.events.filter(e=>e.id!==ev.id);
+      render();
+      await saveEvents();
+    });
+  }catch(e){ showToast('Could not save — check connection'); }
+}
+
 function el(tag, attrs={}, children=[]){
   const e = document.createElement(tag);
   for(const [k,v] of Object.entries(attrs)){
@@ -683,6 +863,27 @@ function medsSummaryLabel(feedEvents){
   return parts.length ? `💊 ${parts.join(', ')}` : '';
 }
 
+function eventDotColor(ev){
+  if(ev.type === 'feed') return 'var(--feed)';
+  if(ev.type === 'diaper') return 'var(--diaper)';
+  return 'var(--activity)';
+}
+function eventIcoClass(ev){
+  if(ev.type === 'feed') return 'feed';
+  if(ev.type === 'diaper') return 'diaper';
+  return 'activity';
+}
+function eventIcon(ev){
+  if(ev.type === 'feed') return '🍼';
+  if(ev.type === 'diaper') return '💩';
+  return '🤸';
+}
+function eventLabel(ev){
+  if(ev.type === 'feed') return `Feeding — ${ev.amount}${ev.unit}`;
+  if(ev.type === 'diaper') return `Diaper — ${diaperLabel(ev.diaperType)}`;
+  return `${ev.activityName || 'Activity'} — ${ev.durationMinutes} min`;
+}
+
 function recentEvents(){
   return [...state.events].sort((a,b)=>b.timestamp-a.timestamp).slice(0,4);
 }
@@ -702,6 +903,10 @@ function renderHome(root){
     el('div', {class:'icon'}, '💩'),
     el('div', {}, [el('div', {class:'label'}, 'Diaper'), el('div', {class:'sub'}, 'One tap to log a change')])
   ]));
+  main.appendChild(el('button', {class:'stack-btn btn-activity', onclick: ()=>openNewEntry('activity')}, [
+    el('div', {class:'icon'}, '🤸'),
+    el('div', {}, [el('div', {class:'label'}, 'Activity'), el('div', {class:'sub'}, 'Log tummy time and more')])
+  ]));
   main.appendChild(el('button', {class:'stack-btn btn-log', onclick: ()=>{ state.viewDate = startOfDay(new Date()); state.screen='log'; render(); }}, [
     el('div', {class:'icon'}, '📅'),
     el('div', {}, [el('div', {class:'label'}, 'Daily Log'), el('div', {class:'sub'}, "View today's events")])
@@ -714,10 +919,9 @@ function renderHome(root){
     card.appendChild(el('div', {class:'empty'}, 'Nothing logged yet today.'));
   } else {
     recent.forEach(ev=>{
-      const isFeed = ev.type === 'feed';
       const row = el('div', {class:'recent-row', style:'cursor:pointer', onclick: ()=>openEditEntry(ev)}, [
-        el('span', {class:'dot', style:`background:${isFeed?'var(--feed)':'var(--diaper)'}`}),
-        el('span', {}, isFeed ? `Feeding — ${ev.amount}${ev.unit}` : `Diaper — ${diaperLabel(ev.diaperType)}`),
+        el('span', {class:'dot', style:`background:${eventDotColor(ev)}`}),
+        el('span', {}, eventLabel(ev)),
         el('span', {class:'meta'}, fmtTime(ev.timestamp))
       ]);
       card.appendChild(row);
@@ -728,8 +932,11 @@ function renderHome(root){
 
   if(state.modal === 'feed') root.appendChild(renderFeedModal());
   if(state.modal === 'diaper') root.appendChild(renderDiaperModal());
+  if(state.modal === 'activity') root.appendChild(renderActivityModal());
   if(state.medsScreen === 'select') root.appendChild(renderMedsSelectOverlay());
   if(state.medsScreen === 'add') root.appendChild(renderMedsAddOverlay());
+  if(state.activityScreen === 'select') root.appendChild(renderActivitySelectOverlay());
+  if(state.activityScreen === 'add') root.appendChild(renderActivityAddOverlay());
   if(state.toast) root.appendChild(renderToast());
 }
 
@@ -974,6 +1181,152 @@ function renderDiaperModal(){
   return overlay;
 }
 
+function renderActivityTypeField(){
+  const selectedAct = state.activities.find(a=>a.id===state.selectedActivityId);
+  return el('button', {class:'select-field', type:'button', onclick: openActivitySelect}, [
+    el('span', {class: selectedAct ? '' : 'placeholder'}, selectedAct ? selectedAct.name : 'Select activity type'),
+    el('span', {class:'chev'}, '›')
+  ]);
+}
+
+function renderActivityTimer(){
+  const wrap = el('div', {style:'text-align:center; margin-top:10px;'});
+  const currentElapsed = state.timerRunning ? (Date.now() - state.timerStartedAt) : state.timerElapsedMs;
+  wrap.appendChild(el('div', {style:'font-size:36px; font-weight:700; font-variant-numeric:tabular-nums; margin-bottom:14px;'}, formatElapsed(currentElapsed)));
+  wrap.appendChild(el('button', {
+    type:'button',
+    class: 'timer-btn' + (state.timerRunning ? ' running' : ''),
+    onclick: state.timerRunning ? stopTimer : startTimer
+  }, state.timerRunning ? 'Stop' : 'Start'));
+  return wrap;
+}
+
+function renderActivityDurationSection(){
+  const wrap = el('div', {});
+  wrap.appendChild(el('div', {class:'field-label'}, 'Duration'));
+
+  const modeRow = el('div', {class:'chip-row'});
+  [['manual','✏️ Manual'], ['timer','⏱️ Timer']].forEach(([val,label])=>{
+    modeRow.appendChild(el('button', {
+      class: 'chip' + (state.activityMode===val ? ' active' : ''),
+      type:'button',
+      onclick: ()=>{
+        if(val === 'manual' && state.timerRunning) stopTimer();
+        state.activityMode = val;
+        render();
+      }
+    }, label));
+  });
+  wrap.appendChild(modeRow);
+
+  if(state.activityMode === 'timer'){
+    wrap.appendChild(renderActivityTimer());
+  } else {
+    const durationInput = el('input', {class:'amount-input', style:'font-size:28px; margin-top:10px;', type:'number', inputmode:'decimal', placeholder:'0', value: state.activityDuration});
+    durationInput.addEventListener('input', (e)=>{ state.activityDuration = e.target.value; });
+    wrap.appendChild(el('div', {class:'amount-row', style:'margin-top:10px;'}, [durationInput, el('div', {style:'color:var(--ink-soft); font-weight:600; font-size:15px;'}, 'min')]));
+  }
+  return wrap;
+}
+
+function renderActivityModal(){
+  const isEdit = !!state.editingId;
+  const overlay = el('div', {class:'overlay', onclick:(e)=>{ if(e.target===overlay) closeModal(); }});
+  const sheet = el('div', {class:'sheet'});
+  sheet.appendChild(el('h2', {}, isEdit ? '🤸 Edit activity' : '🤸 Activity'));
+  sheet.appendChild(el('div', {class:'hint'}, 'What did Coz do, and for how long?'));
+
+  sheet.appendChild(el('div', {class:'field-label'}, 'Type'));
+  sheet.appendChild(renderActivityTypeField());
+
+  sheet.appendChild(renderActivityDurationSection());
+
+  sheet.appendChild(el('div', {class:'field-label'}, 'Date'));
+  sheet.appendChild(renderDateField());
+
+  sheet.appendChild(el('div', {class:'field-label'}, 'Time'));
+  sheet.appendChild(renderTimeField());
+
+  sheet.appendChild(el('div', {class:'field-label'}, 'Note (optional)'));
+  const noteInput = el('textarea', {class:'note-input', rows:'2', placeholder:'e.g. on play mat, tolerated well'}, state.note);
+  noteInput.addEventListener('input', (e)=>{ state.note = e.target.value; });
+  sheet.appendChild(noteInput);
+
+  const actions = el('div', {class:'sheet-actions'});
+  actions.appendChild(el('button', {class:'btn-secondary', onclick: closeModal}, 'Cancel'));
+  actions.appendChild(el('button', {class:'btn-primary activity', onclick: logActivity}, 'Save'));
+  sheet.appendChild(actions);
+
+  if(isEdit){
+    sheet.appendChild(el('button', {class:'delete-link', onclick: deleteEditingEntry}, 'Delete entry'));
+  }
+
+  overlay.appendChild(sheet);
+  return overlay;
+}
+
+function renderActivitySelectOverlay(){
+  const overlay = el('div', {class:'overlay overlay-top', onclick:(e)=>{ if(e.target===overlay) closeActivityScreen(); }});
+  const sheet = el('div', {class:'sheet'});
+  sheet.appendChild(el('h2', {}, '🤸 Activity Type'));
+  sheet.appendChild(el('div', {class:'hint'}, 'What kind of activity?'));
+
+  if(state.activities.length === 0){
+    sheet.appendChild(el('div', {class:'empty'}, 'No activity types saved yet.'));
+  } else {
+    const list = el('div', {});
+    state.activities.forEach(a=>{
+      const isSelected = state.selectedActivityId === a.id;
+      list.appendChild(el('div', {
+        class: 'med-row' + (isSelected ? ' selected' : ''),
+        onclick: ()=>selectActivity(a.id)
+      }, [
+        el('div', {class:'title'}, a.name),
+        el('div', {class:'med-row-actions'}, [
+          el('button', {class:'med-edit-btn', type:'button', onclick:(e)=>{ e.stopPropagation(); openEditActivityType(a); }}, '✏️'),
+          el('div', {class:'med-check'}, isSelected ? '✓' : '')
+        ])
+      ]));
+    });
+    sheet.appendChild(list);
+  }
+
+  sheet.appendChild(el('button', {class:'export-btn', style:'width:100%; margin-top:6px;', onclick: openAddActivityType}, '+ Add an activity type'));
+
+  const actions = el('div', {class:'sheet-actions'});
+  actions.appendChild(el('button', {class:'btn-secondary', style:'flex:1;', onclick: closeActivityScreen}, 'Close'));
+  sheet.appendChild(actions);
+
+  overlay.appendChild(sheet);
+  return overlay;
+}
+
+function renderActivityAddOverlay(){
+  const isEdit = !!state.editingActivityTypeId;
+  const overlay = el('div', {class:'overlay overlay-top', onclick:(e)=>{ if(e.target===overlay) cancelAddActivityType(); }});
+  const sheet = el('div', {class:'sheet'});
+  sheet.appendChild(el('h2', {}, isEdit ? '🤸 Edit activity type' : '🤸 Add activity type'));
+  sheet.appendChild(el('div', {class:'hint'}, isEdit ? 'Update the name below.' : 'e.g. Tummy Time, Bath, Reading'));
+
+  sheet.appendChild(el('div', {class:'field-label'}, 'Name'));
+  const nameInput = el('input', {class:'note-input', type:'text', placeholder:'e.g. Tummy Time', value: state.newActivityName});
+  nameInput.addEventListener('input', (e)=>{ state.newActivityName = e.target.value; });
+  sheet.appendChild(nameInput);
+
+  const actions = el('div', {class:'sheet-actions'});
+  actions.appendChild(el('button', {class:'btn-secondary', onclick: cancelAddActivityType}, 'Cancel'));
+  actions.appendChild(el('button', {class:'btn-primary', onclick: saveActivityType}, 'Save'));
+  sheet.appendChild(actions);
+
+  if(isEdit){
+    sheet.appendChild(el('button', {class:'delete-link', onclick: deleteActivityType}, 'Delete activity type'));
+  }
+
+  overlay.appendChild(sheet);
+  setTimeout(()=>nameInput.focus(), 50);
+  return overlay;
+}
+
 function renderToast(){
   const t = el('div', {class:'toast'}, [el('span', {}, state.toast.msg)]);
   if(state.toast.undoFn){
@@ -1024,11 +1377,10 @@ function renderLog(root){
   } else {
     const timeline = el('div', {class:'timeline'});
     dayEvents.forEach(ev=>{
-      const isFeed = ev.type === 'feed';
       const card = el('div', {class:'event-card', onclick: ()=>openEditEntry(ev)}, [
-        el('div', {class:'ico ' + (isFeed?'feed':'diaper')}, isFeed ? '🍼' : '💩'),
+        el('div', {class:'ico ' + eventIcoClass(ev)}, eventIcon(ev)),
         el('div', {class:'details'}, [
-          el('div', {class:'title'}, isFeed ? `Feeding — ${ev.amount}${ev.unit}` : `Diaper — ${diaperLabel(ev.diaperType)}`),
+          el('div', {class:'title'}, eventLabel(ev)),
           el('div', {class:'desc'}, ev.note ? ev.note : '')
         ]),
         el('div', {class:'time'}, fmtTime(ev.timestamp))
@@ -1041,8 +1393,11 @@ function renderLog(root){
   root.appendChild(main);
   if(state.modal === 'feed') root.appendChild(renderFeedModal());
   if(state.modal === 'diaper') root.appendChild(renderDiaperModal());
+  if(state.modal === 'activity') root.appendChild(renderActivityModal());
   if(state.medsScreen === 'select') root.appendChild(renderMedsSelectOverlay());
   if(state.medsScreen === 'add') root.appendChild(renderMedsAddOverlay());
+  if(state.activityScreen === 'select') root.appendChild(renderActivitySelectOverlay());
+  if(state.activityScreen === 'add') root.appendChild(renderActivityAddOverlay());
   if(state.toast) root.appendChild(renderToast());
 }
 
