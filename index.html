@@ -521,6 +521,7 @@ function openNewEntry(type){
   state.editingMedId = null;
   resetActivityFields();
   if(type==='diaper') state.diaperType = 'dirty';
+  if(type==='activity') state.activityMode = 'timer';
   setEntryTimeFromDate(new Date());
   render();
 }
