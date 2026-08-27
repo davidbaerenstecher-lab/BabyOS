@@ -707,7 +707,10 @@ function startTimer(){
   state.timerElapsedMs = 0;
   state.timerRunning = true;
   state.timerStartedAt = Date.now();
-  state.timerIntervalId = setInterval(()=>{ render(); }, 1000);
+  state.timerIntervalId = setInterval(()=>{
+    const displayEl = document.getElementById('timer-display');
+    if(displayEl) displayEl.textContent = formatElapsed(Date.now() - state.timerStartedAt);
+  }, 1000);
   render();
 }
 
@@ -1192,7 +1195,7 @@ function renderActivityTypeField(){
 function renderActivityTimer(){
   const wrap = el('div', {style:'text-align:center; margin-top:10px;'});
   const currentElapsed = state.timerRunning ? (Date.now() - state.timerStartedAt) : state.timerElapsedMs;
-  wrap.appendChild(el('div', {style:'font-size:36px; font-weight:700; font-variant-numeric:tabular-nums; margin-bottom:14px;'}, formatElapsed(currentElapsed)));
+  wrap.appendChild(el('div', {id:'timer-display', style:'font-size:36px; font-weight:700; font-variant-numeric:tabular-nums; margin-bottom:14px;'}, formatElapsed(currentElapsed)));
   wrap.appendChild(el('button', {
     type:'button',
     class: 'timer-btn' + (state.timerRunning ? ' running' : ''),
