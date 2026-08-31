@@ -845,40 +845,48 @@ async function logFeed(){
 }
 
 async function logActivity(){
-  if(!state.selectedActivityId){
-    showToast('Select an activity type first');
-    return;
-  }
-  const dur = parseFloat(state.activityDuration);
-  if(!dur || dur <= 0){
-    showToast(state.activityMode === 'timer' ? 'Start and stop the timer first' : 'Enter a duration');
-    return;
-  }
-  const act = state.activities.find(a=>a.id===state.selectedActivityId);
-  const ts = computeEntryTimestamp();
-  if(state.editingId){
-    const idx = state.events.findIndex(e=>e.id===state.editingId);
-    if(idx === -1) return;
-    state.events[idx] = {...state.events[idx], activityId: state.selectedActivityId, activityName: act ? act.name : state.events[idx].activityName, durationMinutes: dur, note: state.note.trim(), timestamp: ts};
-    closeModal();
-    try{ await saveEvents(); showToast('Entry updated'); }
-    catch(e){ showToast('Could not save — check connection'); }
-    return;
-  }
-  const ev = { id:'e'+Date.now()+Math.random().toString(36).slice(2,7), type:'activity', activityId: state.selectedActivityId, activityName: act ? act.name : '', durationMinutes: dur, timestamp: ts, note: state.note.trim() };
-  state.events.push(ev);
-  resetActivityFields();
-  state.note = '';
-  state.modal = null;
-  render();
   try{
-    await saveEvents();
-    showToast(`Logged ${ev.activityName} — ${dur} min`, async ()=>{
-      state.events = state.events.filter(e=>e.id!==ev.id);
-      render();
+    if(!state.selectedActivityId){
+      showToast('Select an activity type first');
+      return;
+    }
+    const dur = parseFloat(state.activityDuration);
+    if(!dur || dur <= 0){
+      showToast(state.activityMode === 'timer' ? 'Start and stop the timer first' : 'Enter a duration');
+      return;
+    }
+    const act = state.activities.find(a=>a.id===state.selectedActivityId);
+    const ts = computeEntryTimestamp();
+    if(state.editingId){
+      const idx = state.events.findIndex(e=>e.id===state.editingId);
+      if(idx === -1){
+        showToast('Could not find this entry to update');
+        return;
+      }
+      state.events[idx] = {...state.events[idx], activityId: state.selectedActivityId, activityName: act ? act.name : state.events[idx].activityName, durationMinutes: dur, note: state.note.trim(), timestamp: ts};
+      closeModal();
+      try{ await saveEvents(); showToast('Entry updated'); }
+      catch(e){ showToast('Could not save — check connection'); }
+      return;
+    }
+    const ev = { id:'e'+Date.now()+Math.random().toString(36).slice(2,7), type:'activity', activityId: state.selectedActivityId, activityName: act ? act.name : '', durationMinutes: dur, timestamp: ts, note: state.note.trim() };
+    state.events.push(ev);
+    resetActivityFields();
+    state.note = '';
+    state.modal = null;
+    render();
+    try{
       await saveEvents();
-    });
-  }catch(e){ showToast('Could not save — check connection'); }
+      showToast(`Logged ${ev.activityName} — ${dur} min`, async ()=>{
+        state.events = state.events.filter(e=>e.id!==ev.id);
+        render();
+        await saveEvents();
+      });
+    }catch(e){ showToast('Could not save — check connection'); }
+  }catch(err){
+    console.error('logActivity failed', err);
+    showToast('Error: ' + (err && err.message ? err.message : String(err)));
+  }
 }
 
 function el(tag, attrs={}, children=[]){
