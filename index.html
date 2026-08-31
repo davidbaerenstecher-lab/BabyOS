@@ -144,12 +144,22 @@
   .sheet{
     width:100%; max-width:480px;
     max-height: 88vh;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    display:flex; flex-direction:column;
     background: var(--bg);
     border-radius: 26px 26px 0 0;
-    padding: 22px 20px calc(env(safe-area-inset-bottom) + 22px);
     animation: rise .22s ease-out;
+  }
+  .sheet-scroll{
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    min-height: 0;
+    padding: 22px 20px 4px;
+  }
+  .sheet-footer{
+    flex-shrink: 0;
+    border-top: 1px solid var(--line);
+    padding: 14px 20px calc(env(safe-area-inset-bottom) + 20px);
+    background: var(--bg);
   }
   @keyframes rise{ from{ transform: translateY(24px); opacity:0 } to{ transform:translateY(0); opacity:1 } }
   .sheet h2{ margin: 0 0 4px; font-size: 20px; }
@@ -229,7 +239,7 @@
     cursor:pointer; font-family:inherit; box-shadow: 0 6px 16px rgba(0,0,0,0.12);
   }
   .timer-btn.running{ background: #C75450; }
-  .sheet-actions{ display:flex; gap:10px; margin-top:22px; }
+  .sheet-actions{ display:flex; gap:10px; }
   .btn-secondary, .btn-primary{
     flex:1; border:none; border-radius:16px; padding:16px; font-size:16px; font-weight:600; font-family:inherit; cursor:pointer;
   }
@@ -1066,11 +1076,12 @@ function renderMedsSection(){
 function renderMedsSelectOverlay(){
   const overlay = el('div', {class:'overlay overlay-top', onclick:(e)=>{ if(e.target===overlay) closeMedsScreen(); }});
   const sheet = el('div', {class:'sheet'});
-  sheet.appendChild(el('h2', {}, '💊 Meds'));
-  sheet.appendChild(el('div', {class:'hint'}, 'What did Coz take with this feeding?'));
+  const scroll = el('div', {class:'sheet-scroll'});
+  scroll.appendChild(el('h2', {}, '💊 Meds'));
+  scroll.appendChild(el('div', {class:'hint'}, 'What did Coz take with this feeding?'));
 
   if(state.meds.length === 0){
-    sheet.appendChild(el('div', {class:'empty'}, 'No medications saved yet.'));
+    scroll.appendChild(el('div', {class:'empty'}, 'No medications saved yet.'));
   } else {
     const list = el('div', {});
     state.meds.forEach(m=>{
@@ -1089,14 +1100,17 @@ function renderMedsSelectOverlay(){
         ])
       ]));
     });
-    sheet.appendChild(list);
+    scroll.appendChild(list);
   }
 
-  sheet.appendChild(el('button', {class:'export-btn', style:'width:100%; margin-top:6px;', onclick: openAddMed}, '+ Add a medication'));
+  scroll.appendChild(el('button', {class:'export-btn', style:'width:100%; margin-top:6px;', onclick: openAddMed}, '+ Add a medication'));
+  sheet.appendChild(scroll);
 
+  const footer = el('div', {class:'sheet-footer'});
   const actions = el('div', {class:'sheet-actions'});
   actions.appendChild(el('button', {class:'btn-primary', style:'flex:1;', onclick: closeMedsScreen}, 'Done'));
-  sheet.appendChild(actions);
+  footer.appendChild(actions);
+  sheet.appendChild(footer);
 
   overlay.appendChild(sheet);
   return overlay;
@@ -1106,15 +1120,16 @@ function renderMedsAddOverlay(){
   const isEdit = !!state.editingMedId;
   const overlay = el('div', {class:'overlay overlay-top', onclick:(e)=>{ if(e.target===overlay) cancelAddMed(); }});
   const sheet = el('div', {class:'sheet'});
-  sheet.appendChild(el('h2', {}, isEdit ? '💊 Edit medication' : '💊 Add medication'));
-  sheet.appendChild(el('div', {class:'hint'}, isEdit ? 'Update the details below.' : "Save it so it's quick to log next time."));
+  const scroll = el('div', {class:'sheet-scroll'});
+  scroll.appendChild(el('h2', {}, isEdit ? '💊 Edit medication' : '💊 Add medication'));
+  scroll.appendChild(el('div', {class:'hint'}, isEdit ? 'Update the details below.' : "Save it so it's quick to log next time."));
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Name'));
+  scroll.appendChild(el('div', {class:'field-label'}, 'Name'));
   const nameInput = el('input', {class:'note-input', type:'text', placeholder:'e.g. Vitamin D drops', value: state.newMedName});
   nameInput.addEventListener('input', (e)=>{ state.newMedName = e.target.value; });
-  sheet.appendChild(nameInput);
+  scroll.appendChild(nameInput);
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Amount'));
+  scroll.appendChild(el('div', {class:'field-label'}, 'Amount'));
   const unitRow = el('div', {class:'chip-row'});
   ['oz','mL','drops','tsp'].forEach(u=>{
     unitRow.appendChild(el('button', {
@@ -1123,25 +1138,28 @@ function renderMedsAddOverlay(){
       onclick: ()=>{ state.newMedUnit = u; render(); }
     }, u));
   });
-  sheet.appendChild(unitRow);
+  scroll.appendChild(unitRow);
 
   const amountInput = el('input', {class:'note-input', style:'margin-top:10px;', type:'number', inputmode:'decimal', placeholder:'Amount (optional)', value: state.newMedAmount});
   amountInput.addEventListener('input', (e)=>{ state.newMedAmount = e.target.value; });
-  sheet.appendChild(amountInput);
+  scroll.appendChild(amountInput);
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Note (optional)'));
+  scroll.appendChild(el('div', {class:'field-label'}, 'Note (optional)'));
   const noteInput = el('textarea', {class:'note-input', rows:'2', placeholder:'e.g. give with food'}, state.newMedNote);
   noteInput.addEventListener('input', (e)=>{ state.newMedNote = e.target.value; });
-  sheet.appendChild(noteInput);
+  scroll.appendChild(noteInput);
+  sheet.appendChild(scroll);
 
+  const footer = el('div', {class:'sheet-footer'});
   const actions = el('div', {class:'sheet-actions'});
   actions.appendChild(el('button', {class:'btn-secondary', onclick: cancelAddMed}, 'Cancel'));
   actions.appendChild(el('button', {class:'btn-primary', onclick: saveNewMed}, 'Save'));
-  sheet.appendChild(actions);
+  footer.appendChild(actions);
 
   if(isEdit){
-    sheet.appendChild(el('button', {class:'delete-link', onclick: deleteMed}, 'Delete medication'));
+    footer.appendChild(el('button', {class:'delete-link', onclick: deleteMed}, 'Delete medication'));
   }
+  sheet.appendChild(footer);
 
   overlay.appendChild(sheet);
   setTimeout(()=>nameInput.focus(), 50);
@@ -1152,8 +1170,9 @@ function renderFeedModal(){
   const isEdit = !!state.editingId;
   const overlay = el('div', {class:'overlay', onclick:(e)=>{ if(e.target===overlay) closeModal(); }});
   const sheet = el('div', {class:'sheet'});
-  sheet.appendChild(el('h2', {}, isEdit ? '🍼 Edit feeding' : '🍼 Feeding'));
-  sheet.appendChild(el('div', {class:'hint'}, 'How much did Coz drink?'));
+  const scroll = el('div', {class:'sheet-scroll'});
+  scroll.appendChild(el('h2', {}, isEdit ? '🍼 Edit feeding' : '🍼 Feeding'));
+  scroll.appendChild(el('div', {class:'hint'}, 'How much did Coz drink?'));
 
   const unitToggle = el('div', {class:'unit-toggle'});
   ['oz','ml'].forEach(u=>{
@@ -1166,29 +1185,32 @@ function renderFeedModal(){
   const amountInput = el('input', {class:'amount-input', type:'number', inputmode:'decimal', placeholder:'0', value: state.feedAmount});
   amountInput.addEventListener('input', (e)=>{ state.feedAmount = e.target.value; });
 
-  sheet.appendChild(el('div', {class:'amount-row'}, [amountInput, unitToggle]));
+  scroll.appendChild(el('div', {class:'amount-row'}, [amountInput, unitToggle]));
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Date'));
-  sheet.appendChild(renderDateField());
+  scroll.appendChild(el('div', {class:'field-label'}, 'Date'));
+  scroll.appendChild(renderDateField());
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Time'));
-  sheet.appendChild(renderTimeField());
+  scroll.appendChild(el('div', {class:'field-label'}, 'Time'));
+  scroll.appendChild(renderTimeField());
 
-  sheet.appendChild(renderMedsSection());
+  scroll.appendChild(renderMedsSection());
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Note (optional)'));
+  scroll.appendChild(el('div', {class:'field-label'}, 'Note (optional)'));
   const noteInput = el('textarea', {class:'note-input', rows:'2', placeholder:'e.g. left side, fussy after'}, state.note);
   noteInput.addEventListener('input', (e)=>{ state.note = e.target.value; });
-  sheet.appendChild(noteInput);
+  scroll.appendChild(noteInput);
+  sheet.appendChild(scroll);
 
+  const footer = el('div', {class:'sheet-footer'});
   const actions = el('div', {class:'sheet-actions'});
   actions.appendChild(el('button', {class:'btn-secondary', onclick: closeModal}, 'Cancel'));
   actions.appendChild(el('button', {class:'btn-primary', onclick: logFeed}, 'Save'));
-  sheet.appendChild(actions);
+  footer.appendChild(actions);
 
   if(isEdit){
-    sheet.appendChild(el('button', {class:'delete-link', onclick: deleteEditingEntry}, 'Delete entry'));
+    footer.appendChild(el('button', {class:'delete-link', onclick: deleteEditingEntry}, 'Delete entry'));
   }
+  sheet.appendChild(footer);
 
   overlay.appendChild(sheet);
   setTimeout(()=>amountInput.focus(), 50);
@@ -1199,8 +1221,9 @@ function renderDiaperModal(){
   const isEdit = !!state.editingId;
   const overlay = el('div', {class:'overlay', onclick:(e)=>{ if(e.target===overlay) closeModal(); }});
   const sheet = el('div', {class:'sheet'});
-  sheet.appendChild(el('h2', {}, isEdit ? '💩 Edit diaper change' : '💩 Diaper change'));
-  sheet.appendChild(el('div', {class:'hint'}, 'What kind?'));
+  const scroll = el('div', {class:'sheet-scroll'});
+  scroll.appendChild(el('h2', {}, isEdit ? '💩 Edit diaper change' : '💩 Diaper change'));
+  scroll.appendChild(el('div', {class:'hint'}, 'What kind?'));
 
   const chips = el('div', {class:'chip-row'});
   [['wet','💧 Pee'],['dirty','💩 Poo'],['both','💧💩 Both']].forEach(([val,label])=>{
@@ -1209,27 +1232,30 @@ function renderDiaperModal(){
       onclick: ()=>{ state.diaperType = val; render(); }
     }, label));
   });
-  sheet.appendChild(chips);
+  scroll.appendChild(chips);
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Date'));
-  sheet.appendChild(renderDateField());
+  scroll.appendChild(el('div', {class:'field-label'}, 'Date'));
+  scroll.appendChild(renderDateField());
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Time'));
-  sheet.appendChild(renderTimeField());
+  scroll.appendChild(el('div', {class:'field-label'}, 'Time'));
+  scroll.appendChild(renderTimeField());
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Note (optional)'));
+  scroll.appendChild(el('div', {class:'field-label'}, 'Note (optional)'));
   const noteInput = el('textarea', {class:'note-input', rows:'2', placeholder:'e.g. slight rash, blowout'}, state.note);
   noteInput.addEventListener('input', (e)=>{ state.note = e.target.value; });
-  sheet.appendChild(noteInput);
+  scroll.appendChild(noteInput);
+  sheet.appendChild(scroll);
 
+  const footer = el('div', {class:'sheet-footer'});
   const actions = el('div', {class:'sheet-actions'});
   actions.appendChild(el('button', {class:'btn-secondary', onclick: closeModal}, 'Cancel'));
   actions.appendChild(el('button', {class:'btn-primary diaper', onclick: ()=>logDiaper(state.diaperType)}, 'Save'));
-  sheet.appendChild(actions);
+  footer.appendChild(actions);
 
   if(isEdit){
-    sheet.appendChild(el('button', {class:'delete-link', onclick: deleteEditingEntry}, 'Delete entry'));
+    footer.appendChild(el('button', {class:'delete-link', onclick: deleteEditingEntry}, 'Delete entry'));
   }
+  sheet.appendChild(footer);
 
   overlay.appendChild(sheet);
   return overlay;
@@ -1287,33 +1313,37 @@ function renderActivityModal(){
   const isEdit = !!state.editingId;
   const overlay = el('div', {class:'overlay', onclick:(e)=>{ if(e.target===overlay) closeModal(); }});
   const sheet = el('div', {class:'sheet'});
-  sheet.appendChild(el('h2', {}, isEdit ? '🤸 Edit activity' : '🤸 Activity'));
-  sheet.appendChild(el('div', {class:'hint'}, 'What did Coz do, and for how long?'));
+  const scroll = el('div', {class:'sheet-scroll'});
+  scroll.appendChild(el('h2', {}, isEdit ? '🤸 Edit activity' : '🤸 Activity'));
+  scroll.appendChild(el('div', {class:'hint'}, 'What did Coz do, and for how long?'));
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Type'));
-  sheet.appendChild(renderActivityTypeField());
+  scroll.appendChild(el('div', {class:'field-label'}, 'Type'));
+  scroll.appendChild(renderActivityTypeField());
 
-  sheet.appendChild(renderActivityDurationSection());
+  scroll.appendChild(renderActivityDurationSection());
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Date'));
-  sheet.appendChild(renderDateField());
+  scroll.appendChild(el('div', {class:'field-label'}, 'Date'));
+  scroll.appendChild(renderDateField());
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Time'));
-  sheet.appendChild(renderTimeField());
+  scroll.appendChild(el('div', {class:'field-label'}, 'Time'));
+  scroll.appendChild(renderTimeField());
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Note (optional)'));
+  scroll.appendChild(el('div', {class:'field-label'}, 'Note (optional)'));
   const noteInput = el('textarea', {class:'note-input', rows:'2', placeholder:'e.g. on play mat, tolerated well'}, state.note);
   noteInput.addEventListener('input', (e)=>{ state.note = e.target.value; });
-  sheet.appendChild(noteInput);
+  scroll.appendChild(noteInput);
+  sheet.appendChild(scroll);
 
+  const footer = el('div', {class:'sheet-footer'});
   const actions = el('div', {class:'sheet-actions'});
   actions.appendChild(el('button', {class:'btn-secondary', onclick: closeModal}, 'Cancel'));
   actions.appendChild(el('button', {class:'btn-primary activity', onclick: logActivity}, 'Save'));
-  sheet.appendChild(actions);
+  footer.appendChild(actions);
 
   if(isEdit){
-    sheet.appendChild(el('button', {class:'delete-link', onclick: deleteEditingEntry}, 'Delete entry'));
+    footer.appendChild(el('button', {class:'delete-link', onclick: deleteEditingEntry}, 'Delete entry'));
   }
+  sheet.appendChild(footer);
 
   overlay.appendChild(sheet);
   return overlay;
@@ -1322,11 +1352,12 @@ function renderActivityModal(){
 function renderActivitySelectOverlay(){
   const overlay = el('div', {class:'overlay overlay-top', onclick:(e)=>{ if(e.target===overlay) closeActivityScreen(); }});
   const sheet = el('div', {class:'sheet'});
-  sheet.appendChild(el('h2', {}, '🤸 Activity Type'));
-  sheet.appendChild(el('div', {class:'hint'}, 'What kind of activity?'));
+  const scroll = el('div', {class:'sheet-scroll'});
+  scroll.appendChild(el('h2', {}, '🤸 Activity Type'));
+  scroll.appendChild(el('div', {class:'hint'}, 'What kind of activity?'));
 
   if(state.activities.length === 0){
-    sheet.appendChild(el('div', {class:'empty'}, 'No activity types saved yet.'));
+    scroll.appendChild(el('div', {class:'empty'}, 'No activity types saved yet.'));
   } else {
     const list = el('div', {});
     state.activities.forEach(a=>{
@@ -1342,14 +1373,17 @@ function renderActivitySelectOverlay(){
         ])
       ]));
     });
-    sheet.appendChild(list);
+    scroll.appendChild(list);
   }
 
-  sheet.appendChild(el('button', {class:'export-btn', style:'width:100%; margin-top:6px;', onclick: openAddActivityType}, '+ Add an activity type'));
+  scroll.appendChild(el('button', {class:'export-btn', style:'width:100%; margin-top:6px;', onclick: openAddActivityType}, '+ Add an activity type'));
+  sheet.appendChild(scroll);
 
+  const footer = el('div', {class:'sheet-footer'});
   const actions = el('div', {class:'sheet-actions'});
   actions.appendChild(el('button', {class:'btn-secondary', style:'flex:1;', onclick: closeActivityScreen}, 'Close'));
-  sheet.appendChild(actions);
+  footer.appendChild(actions);
+  sheet.appendChild(footer);
 
   overlay.appendChild(sheet);
   return overlay;
@@ -1359,22 +1393,26 @@ function renderActivityAddOverlay(){
   const isEdit = !!state.editingActivityTypeId;
   const overlay = el('div', {class:'overlay overlay-top', onclick:(e)=>{ if(e.target===overlay) cancelAddActivityType(); }});
   const sheet = el('div', {class:'sheet'});
-  sheet.appendChild(el('h2', {}, isEdit ? '🤸 Edit activity type' : '🤸 Add activity type'));
-  sheet.appendChild(el('div', {class:'hint'}, isEdit ? 'Update the name below.' : 'e.g. Tummy Time, Bath, Reading'));
+  const scroll = el('div', {class:'sheet-scroll'});
+  scroll.appendChild(el('h2', {}, isEdit ? '🤸 Edit activity type' : '🤸 Add activity type'));
+  scroll.appendChild(el('div', {class:'hint'}, isEdit ? 'Update the name below.' : 'e.g. Tummy Time, Bath, Reading'));
 
-  sheet.appendChild(el('div', {class:'field-label'}, 'Name'));
+  scroll.appendChild(el('div', {class:'field-label'}, 'Name'));
   const nameInput = el('input', {class:'note-input', type:'text', placeholder:'e.g. Tummy Time', value: state.newActivityName});
   nameInput.addEventListener('input', (e)=>{ state.newActivityName = e.target.value; });
-  sheet.appendChild(nameInput);
+  scroll.appendChild(nameInput);
+  sheet.appendChild(scroll);
 
+  const footer = el('div', {class:'sheet-footer'});
   const actions = el('div', {class:'sheet-actions'});
   actions.appendChild(el('button', {class:'btn-secondary', onclick: cancelAddActivityType}, 'Cancel'));
   actions.appendChild(el('button', {class:'btn-primary', onclick: saveActivityType}, 'Save'));
-  sheet.appendChild(actions);
+  footer.appendChild(actions);
 
   if(isEdit){
-    sheet.appendChild(el('button', {class:'delete-link', onclick: deleteActivityType}, 'Delete activity type'));
+    footer.appendChild(el('button', {class:'delete-link', onclick: deleteActivityType}, 'Delete activity type'));
   }
+  sheet.appendChild(footer);
 
   overlay.appendChild(sheet);
   setTimeout(()=>nameInput.focus(), 50);
