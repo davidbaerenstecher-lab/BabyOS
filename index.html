@@ -559,7 +559,10 @@ function openNewEntry(type){
   state.editingMedId = null;
   resetActivityFields();
   if(type==='diaper') state.diaperType = 'dirty';
-  if(type==='activity') state.activityMode = 'timer';
+  if(type==='activity'){
+    state.activityMode = 'timer';
+    if(state.activities.length === 1) state.selectedActivityId = state.activities[0].id;
+  }
   setEntryTimeFromDate(new Date());
   render();
 }
@@ -832,8 +835,15 @@ async function logFeed(){
 }
 
 async function logActivity(){
+  if(!state.selectedActivityId){
+    showToast('Select an activity type first');
+    return;
+  }
   const dur = parseFloat(state.activityDuration);
-  if(!state.selectedActivityId || !dur || dur <= 0) return;
+  if(!dur || dur <= 0){
+    showToast(state.activityMode === 'timer' ? 'Start and stop the timer first' : 'Enter a duration');
+    return;
+  }
   const act = state.activities.find(a=>a.id===state.selectedActivityId);
   const ts = computeEntryTimestamp();
   if(state.editingId){
