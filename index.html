@@ -416,6 +416,34 @@ function computeEntryTimestamp(){
 }
 
 let unsubscribeEvents = null;
+const TIMER_STORAGE_KEY = 'cozylog_activeTimer';
+
+function persistActiveTimer(){
+  try{ localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify({ startedAt: state.timerStartedAt, activityId: state.selectedActivityId })); }
+  catch(e){}
+}
+
+function clearPersistedTimer(){
+  try{ localStorage.removeItem(TIMER_STORAGE_KEY); }
+  catch(e){}
+}
+
+function resumeActiveTimerIfAny(){
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(TIMER_STORAGE_KEY)); }catch(e){}
+  if(!saved || !saved.startedAt) return;
+  state.modal = 'activity';
+  state.editingId = null;
+  state.selectedActivityId = saved.activityId || null;
+  state.activityMode = 'timer';
+  state.timerRunning = true;
+  state.timerStartedAt = saved.startedAt;
+  setEntryTimeFromDate(new Date(saved.startedAt));
+  state.timerIntervalId = setInterval(()=>{
+    const displayEl = document.getElementById('timer-display');
+    if(displayEl) displayEl.textContent = formatElapsed(Date.now() - state.timerStartedAt);
+  }, 1000);
+}
 
 function startListeningForEvents(){
   unsubscribeEvents = onSnapshot(eventsDocRef, (snap)=>{
@@ -423,11 +451,17 @@ function startListeningForEvents(){
     state.events = (data && Array.isArray(data.events)) ? data.events : [];
     state.meds = (data && Array.isArray(data.meds)) ? data.meds : [];
     state.activities = (data && Array.isArray(data.activities)) ? data.activities : [];
-    if(state.screen === 'loading') state.screen = 'home';
+    if(state.screen === 'loading'){
+      state.screen = 'home';
+      resumeActiveTimerIfAny();
+    }
     render();
   }, (err)=>{
     console.error('Firestore listen failed', err);
-    if(state.screen === 'loading') state.screen = 'home';
+    if(state.screen === 'loading'){
+      state.screen = 'home';
+      resumeActiveTimerIfAny();
+    }
     showToast('Could not connect — check your internet connection');
     render();
   });
@@ -491,6 +525,7 @@ function resetActivityTimer(){
   state.timerRunning = false;
   state.timerStartedAt = null;
   state.timerElapsedMs = 0;
+  clearPersistedTimer();
 }
 
 function resetActivityFields(){
@@ -711,6 +746,7 @@ function startTimer(){
   state.timerElapsedMs = 0;
   state.timerRunning = true;
   state.timerStartedAt = Date.now();
+  persistActiveTimer();
   state.timerIntervalId = setInterval(()=>{
     const displayEl = document.getElementById('timer-display');
     if(displayEl) displayEl.textContent = formatElapsed(Date.now() - state.timerStartedAt);
@@ -725,6 +761,7 @@ function stopTimer(){
   state.timerRunning = false;
   state.timerStartedAt = null;
   state.activityDuration = String(Math.round((elapsed / 60000) * 100) / 100);
+  clearPersistedTimer();
   render();
 }
 
