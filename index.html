@@ -956,6 +956,17 @@ function eventLabel(ev){
   return `${ev.activityName || 'Activity'} — ${ev.durationMinutes} min`;
 }
 
+function activitiesSummaryLabel(activityEvents){
+  const totals = {};
+  activityEvents.forEach(ev=>{
+    const key = ev.activityId || ev.activityName;
+    if(!totals[key]) totals[key] = { name: ev.activityName || 'Activity', totalMinutes: 0 };
+    totals[key].totalMinutes += (ev.durationMinutes || 0);
+  });
+  const parts = Object.values(totals).map(a => `${a.name}: ${Math.round(a.totalMinutes * 100) / 100} min`);
+  return parts.length ? `🤸 ${parts.join(', ')}` : '';
+}
+
 function recentEvents(){
   return [...state.events].sort((a,b)=>b.timestamp-a.timestamp).slice(0,4);
 }
@@ -1457,13 +1468,16 @@ function renderLog(root){
     return sum + ml;
   }, 0));
 
+  const activityEvents = dayEvents.filter(ev => ev.type === 'activity');
   const medsSummary = medsSummaryLabel(feedEvents);
+  const activitiesSummary = activitiesSummaryLabel(activityEvents);
   const navInfo = [
     el('div', {class:'day-label'}, fmtDayLabel(state.viewDate)),
     el('div', {class:'day-sub'}, fmtDaySub(state.viewDate)),
     el('div', {class:'day-stats'}, `${feedCount} feeding${feedCount===1?'':'s'} · ${totalMl} mL total`)
   ];
   if(medsSummary) navInfo.push(el('div', {class:'day-meds'}, medsSummary));
+  if(activitiesSummary) navInfo.push(el('div', {class:'day-meds'}, activitiesSummary));
 
   const nav = el('div', {class:'day-nav'}, [
     el('button', {onclick: ()=>{ state.viewDate = new Date(state.viewDate.getTime() - 86400000); render(); }}, '‹'),
