@@ -376,7 +376,12 @@ const state = {
 
 function startOfDay(d){ const x = new Date(d); x.setHours(0,0,0,0); return x; }
 function sameDay(a,b){ return startOfDay(a).getTime() === startOfDay(b).getTime(); }
-function diaperLabel(t){ return t==='wet' ? 'Pee' : t==='dirty' ? 'Poo' : 'Pee & Poo'; }
+function diaperLabel(t){
+  if(t==='wet') return 'Pee';
+  if(t==='dirty') return 'Poo';
+  if(t==='diarrhea') return 'Diarrhea';
+  return 'Pee & Poo';
+}
 function fmtTime(ts){ return new Date(ts).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}); }
 function fmtDayLabel(d){
   const today = startOfDay(new Date());
@@ -1245,7 +1250,7 @@ function renderDiaperModal(){
   scroll.appendChild(el('div', {class:'hint'}, 'What kind?'));
 
   const chips = el('div', {class:'chip-row'});
-  [['wet','💧 Pee'],['dirty','💩 Poo'],['both','💧💩 Both']].forEach(([val,label])=>{
+  [['wet','💧 Pee'],['dirty','💩 Poo'],['both','💧💩 Both'],['diarrhea','🤢 Diarrhea']].forEach(([val,label])=>{
     chips.appendChild(el('button', {
       class: 'chip' + (state.diaperType===val ? ' active' : ''),
       onclick: ()=>{ state.diaperType = val; render(); }
